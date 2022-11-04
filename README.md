@@ -3,6 +3,11 @@
 Let's write programs, e.g. smart contracts in [Ethereum] parlance,
 in [Rust] with [Anchor] for [Solana] [Blockchain].
 
+## Programs
+
+- [Tic-Tac-Toe](t3/programs/t3/src/lib.rs)
+  - Refer to [Anchor]'s [Tic-Tac-Toe Project].
+
 ## Setup
 
 ### Solana
@@ -38,7 +43,8 @@ anchor-cli 0.25.0
 [rust]: https://www.rust-lang.org/
 [anchor]: https://book.anchor-lang.com/
 [solana]: https://solana.com/
+[solana cli]: https://docs.solana.com/cli/install-solana-cli-tools
 [blockchain]: https://en.wikipedia.org/wiki/Blockchain
 [ehtereum]: https://ethereum.org/en/
-[solana cli]: https://docs.solana.com/cli/install-solana-cli-tools
 [cargo]: https://doc.rust-lang.org/cargo/commands/cargo-install.html
+[tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
