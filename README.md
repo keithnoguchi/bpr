@@ -5,6 +5,7 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 
 ## Programs
 
+- [Calculator](calc/programs/calc/src/lib.rs)
 - [Tic-Tac-Toe](t3/programs/t3/src/lib.rs)
   - Refer to [Anchor]'s [Tic-Tac-Toe Project].
 
