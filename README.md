@@ -48,6 +48,27 @@ $ anchor --version
 anchor-cli 0.25.0
 ```
 
+### Airdrop on Wallet
+
+Let's create a command line wallet for testing:
+
+```
+$ solana-keygen new
+```
+and then, airdrop 2 SOL to your wallet on `devnet`:
+
+```
+$ solana airdrop 2 --url devnet $(solana-keygen pubkey)
+```
+double check if you got airdropped.
+
+```
+$ solana balance --url devnet
+2 SOL
+```
+
+Happy Hacking!
+
 [rust]: https://www.rust-lang.org/
 [anchor]: https://book.anchor-lang.com/
 [solana]: https://solana.com/
