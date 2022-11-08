@@ -28,6 +28,14 @@ $ solana --version
 solana-cli 1.13.5 (src:959b760c; feat:1365939126)
 ```
 
+### Solana Program Libray (SPL)
+
+Let's install [SPL Token CLI]:
+
+```
+$ cargo install spl-token-cli
+```
+
 ### Anchor
 
 Let's build it from scratch with [cargo] for fun:
@@ -44,6 +52,7 @@ anchor-cli 0.25.0
 [anchor]: https://book.anchor-lang.com/
 [solana]: https://solana.com/
 [solana cli]: https://docs.solana.com/cli/install-solana-cli-tools
+[spl token cli]: https://lib.rs/crates/spl-token
 [blockchain]: https://en.wikipedia.org/wiki/Blockchain
 [ehtereum]: https://ethereum.org/en/
 [cargo]: https://doc.rust-lang.org/cargo/commands/cargo-install.html
