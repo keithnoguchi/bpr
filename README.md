@@ -3,6 +3,13 @@
 Let's write programs, e.g. smart contracts in [Ethereum] parlance,
 in [Rust] with [Anchor] for [Solana] [Blockchain].
 
+## Primitives
+
+Let's first go over the primitives with [Jimmy Song]'s wonderful
+[Programming Bitcoin] but in Rust.
+
+- [Merkle Tree](ch11/merkle/src/lib.rs)
+
 ## Programs
 
 - [Calculator](calc/programs/calc/src/lib.rs)
@@ -79,3 +86,8 @@ Happy Hacking!
 [ehtereum]: https://ethereum.org/en/
 [cargo]: https://doc.rust-lang.org/cargo/commands/cargo-install.html
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
+[jimmy song]: https://programmingbitcoin.com/
+[programming bitcoin]: https://programmingbitcoin.com/programming-bitcoin-book/
+[implementing vector]: https://doc.rust-lang.org/nomicon/vec/vec.html
+[learning merkel tree]: https://github.com/melekes/merkle-tree-rs/
+[learning merkel tree 2]: https://dev.to/msedzins/learning-rust-merkel-tree-9p
