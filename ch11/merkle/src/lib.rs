@@ -3,6 +3,30 @@ const NR_HASH_SIZE: usize = 32;
 
 pub type Hash = [u8; NR_HASH_SIZE];
 
+pub struct Builder {
+    leaves: Vec<Hash>,
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        let leaves = vec![];
+        Self { leaves }
+    }
+
+    pub fn push(&mut self, hash: Hash) -> &mut Self {
+        self.leaves.push(hash);
+        self
+    }
+
+    pub fn build(&mut self) -> Tree {
+        assert!(!self.leaves.is_empty());
+        if self.leaves.len() / 2 == 1 {
+            self.leaves.push(self.leaves[self.leaves.len() - 1]);
+        }
+        Tree::new(self.leaves.len())
+    }
+}
+
 #[derive(Debug)]
 pub struct Tree {
     hashes: Vec<Option<Hash>>,
@@ -11,6 +35,7 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(leaves: usize) -> Self {
+        assert!(leaves % 1 == 0);
         let (leaves, total) = match leaves {
             0 => (0, 0),
             1 => (1, 1),
