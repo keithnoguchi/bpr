@@ -20,5 +20,11 @@ fn main() {
 
     let tree = TreeBuilder::new().initial_leaf(NR_LEAF.into()).build(depth);
 
-    println!("{:?}", tree.root());
+    for (i, leave) in tree.leaves().iter().take(4).enumerate() {
+        println!("leave[{i}]={:?}", leave);
+    }
+    if tree.leaves().len() > 4 {
+        println!("truncated {} leaves...", tree.leaves().len() - 4);
+    }
+    println!("tree.root={:?}", tree.root());
 }

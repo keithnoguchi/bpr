@@ -16,13 +16,17 @@ impl Deref for Tree {
     type Target = [Option<Hash256>];
 
     fn deref(&self) -> &Self::Target {
-        &self.hashes[self.leaves.start..self.leaves.end]
+        &self.hashes[..]
     }
 }
 
 impl Tree {
     pub fn root(&self) -> Option<Hash256> {
-        self.hashes[0]
+        self[0]
+    }
+
+    pub fn leaves(&self) -> &[Option<Hash256>] {
+        &self.hashes[self.leaves.start..self.leaves.end]
     }
 }
 
@@ -54,7 +58,9 @@ impl TreeBuilder {
             Some(initial_leaf) => initial_leaf,
         };
         let mut index = tree.leaves.start;
-        tree.hashes[index] = Some(initial_leaf);
+        tree.hashes[tree.leaves.start..tree.leaves.end]
+            .iter_mut()
+            .for_each(|hash| *hash = Some(initial_leaf));
 
         // calculate parent hashes all the way to the root.
         while let Some(parent) = parent(index) {
@@ -132,6 +138,15 @@ mod tests {
         assert_eq!(TreeBuilder::new().build(0).len(), 1);
         assert_eq!(TreeBuilder::new().build(1).len(), 3);
         assert_eq!(TreeBuilder::new().build(2).len(), 7);
+        assert_eq!(TreeBuilder::new().build(3).len(), 15);
+    }
+
+    #[test]
+    fn tree_leaves_len() {
+        assert_eq!(TreeBuilder::new().build(0).leaves().len(), 1);
+        assert_eq!(TreeBuilder::new().build(1).leaves().len(), 2);
+        assert_eq!(TreeBuilder::new().build(2).leaves().len(), 4);
+        assert_eq!(TreeBuilder::new().build(3).leaves().len(), 8);
     }
 
     #[test]
