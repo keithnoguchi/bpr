@@ -1,10 +1,11 @@
 //! Merkle Tree
 use hex_literal::hex;
 use merkle::TreeBuilder;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-const NR_DEPTH: usize = 20;
+const NR_DEPTH: Option<NonZeroUsize> = NonZeroUsize::new(20);
 const NR_LEAF: [u8; 32] = hex!("abababababababababababababababababababababababababababababababab");
 
 fn main() {
@@ -13,8 +14,8 @@ fn main() {
     let depth = args
         .next()
         .as_ref()
-        .and_then(|v| usize::from_str(v).ok())
-        .unwrap_or(NR_DEPTH);
+        .and_then(|v| NonZeroUsize::from_str(v).ok())
+        .unwrap_or(NR_DEPTH.unwrap());
 
     println!("{:?}: depth={depth}", progname.file_name().unwrap());
 

@@ -2,6 +2,7 @@
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use sha3::{Digest, Sha3_256};
+use std::num::NonZeroUsize;
 use std::ops::{Deref, Range};
 
 type Hash256 = GenericArray<u8, U32>;
@@ -45,10 +46,11 @@ impl TreeBuilder {
         self
     }
 
-    pub fn build(mut self, depth: usize) -> Tree {
+    pub fn build(mut self, depth: NonZeroUsize) -> Tree {
+        let depth_index = usize::from(depth) - 1; // 0 base index.
         let mut tree = Tree {
             hasher: Sha3_256::new(),
-            leaves: index(depth, 0)..Self::tree_size(depth),
+            leaves: index(depth_index, 0)..Self::tree_size(depth),
             hashes: vec![None; Self::tree_size(depth)],
         };
 
@@ -73,8 +75,8 @@ impl TreeBuilder {
         tree
     }
 
-    fn tree_size(depth: usize) -> usize {
-        (0x1 << (depth + 1)) - 1
+    fn tree_size(depth: NonZeroUsize) -> usize {
+        (0x1 << usize::from(depth)) - 1
     }
 }
 
@@ -117,6 +119,7 @@ pub fn base(index: usize) -> usize {
 mod tests {
     use super::{base, index, pair, parent, TreeBuilder};
     use hex_literal::hex;
+    use std::num::NonZeroUsize;
 
     const SAMPLE_LEAF: [u8; 32] =
         hex!("abababababababababababababababababababababababababababababababab");
@@ -125,37 +128,74 @@ mod tests {
 
     #[test]
     fn tree_root() {
-        let tree = TreeBuilder::new().initial_leaf(SAMPLE_LEAF.into()).build(0);
+        let tree = TreeBuilder::new()
+            .initial_leaf(SAMPLE_LEAF.into())
+            .build(NonZeroUsize::new(1).unwrap());
         assert_eq!(tree.root(), Some(SAMPLE_LEAF.into()));
         let tree = TreeBuilder::new()
             .initial_leaf(SAMPLE_LEAF.into())
-            .build(19);
+            .build(NonZeroUsize::new(20).unwrap());
         assert_eq!(tree.root(), Some(SAMPLE_ROOT.into()));
     }
 
     #[test]
     fn tree_len() {
-        assert_eq!(TreeBuilder::new().build(0).len(), 1);
-        assert_eq!(TreeBuilder::new().build(1).len(), 3);
-        assert_eq!(TreeBuilder::new().build(2).len(), 7);
-        assert_eq!(TreeBuilder::new().build(3).len(), 15);
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(1).unwrap())
+                .len(),
+            1
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(2).unwrap())
+                .len(),
+            3
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(3).unwrap())
+                .len(),
+            7
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(4).unwrap())
+                .len(),
+            15
+        );
     }
 
     #[test]
     fn tree_leaves_len() {
-        assert_eq!(TreeBuilder::new().build(0).leaves().len(), 1);
-        assert_eq!(TreeBuilder::new().build(1).leaves().len(), 2);
-        assert_eq!(TreeBuilder::new().build(2).leaves().len(), 4);
-        assert_eq!(TreeBuilder::new().build(3).leaves().len(), 8);
-    }
-
-    #[test]
-    fn tree_builder_tree_size() {
-        assert_eq!(TreeBuilder::tree_size(0), 1);
-        assert_eq!(TreeBuilder::tree_size(1), 3);
-        assert_eq!(TreeBuilder::tree_size(2), 7);
-        assert_eq!(TreeBuilder::tree_size(3), 15);
-        assert_eq!(TreeBuilder::tree_size(4), 31);
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(1).unwrap())
+                .leaves()
+                .len(),
+            1
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(2).unwrap())
+                .leaves()
+                .len(),
+            2
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(3).unwrap())
+                .leaves()
+                .len(),
+            4
+        );
+        assert_eq!(
+            TreeBuilder::new()
+                .build(NonZeroUsize::new(4).unwrap())
+                .leaves()
+                .len(),
+            8
+        );
     }
 
     #[test]
