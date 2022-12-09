@@ -1,2 +1,4 @@
 [workspace]
-members = ["ch11/merkle"]
+members = [
+    "ch11/merkle",
+]

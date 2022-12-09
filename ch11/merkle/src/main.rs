@@ -1,29 +1,24 @@
-//! Chapter 11: Simplified Payment Verification
+//! Merkle Tree
+use hex_literal::hex;
+use merkle::TreeBuilder;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-const NR_LEAVES: usize = 13;
+const NR_DEPTH: usize = 20;
+const NR_LEAF: [u8; 32] = hex!("abababababababababababababababababababababababababababababababab");
 
 fn main() {
     let mut args = std::env::args();
     let progname = args.next().map(PathBuf::from).unwrap();
-    let nr_leaves = args
+    let depth = args
         .next()
         .as_ref()
         .and_then(|v| usize::from_str(v).ok())
-        .unwrap_or(NR_LEAVES);
+        .unwrap_or(NR_DEPTH);
 
-    println!(
-        "{:?}: with {} leaves",
-        progname.file_name().unwrap(),
-        nr_leaves,
-    );
+    println!("{:?}: depth={depth}", progname.file_name().unwrap());
 
-    let tree = merkle::Tree::new(nr_leaves);
-    for (i, hash) in tree.nodes().enumerate() {
-        println!("node[{i}]={:?}", hash);
-    }
-    for (i, hash) in tree.leaves().enumerate() {
-        println!("leaf[{i}]={:?}", hash);
-    }
+    let tree = TreeBuilder::new().initial_leaf(NR_LEAF.into()).build(depth);
+
+    println!("{:?}", tree.root());
 }

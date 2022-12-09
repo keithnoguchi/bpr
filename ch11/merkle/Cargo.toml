@@ -5,4 +5,6 @@ edition = "2021"
 authors = ["Keith Noguchi <hack@noguchi.us>"]
 
 [dependencies]
-sha2 = "0.10"
+generic-array = "0.14"
+sha3 = "0.10"
+hex-literal = "0.3"
