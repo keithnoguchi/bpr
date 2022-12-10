@@ -35,7 +35,7 @@ impl Tree {
     }
 
     pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
-        let leaf_index = index(self.depth_index, leaf_offset);
+        let leaf_index = index(self.depth_index, 0) + leaf_offset;
         if !self.leaves.contains(&leaf_index) {
             Err("invalid leaf offset")?;
         }
