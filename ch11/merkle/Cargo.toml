@@ -8,3 +8,5 @@ authors = ["Keith Noguchi <hack@noguchi.us>"]
 generic-array = "0.14"
 sha3 = "0.10"
 hex-literal = "0.3"
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = "0.3"

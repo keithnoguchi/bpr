@@ -6,9 +6,10 @@ use std::error::Error;
 use std::num::NonZeroUsize;
 use std::ops::{Deref, Range};
 use std::result;
+use tracing::{instrument, trace};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
-type Hash256 = GenericArray<u8, U32>;
+pub type Hash256 = GenericArray<u8, U32>;
 
 pub struct Tree {
     depth_index: usize,
@@ -34,6 +35,7 @@ impl Tree {
         &self.hashes[self.leaves.start..self.leaves.end]
     }
 
+    #[instrument(name = "Tree::set", skip(self), err)]
     pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
         let leaf_index = index(self.depth_index, 0) + leaf_offset;
         if !self.leaves.contains(&leaf_index) {
@@ -47,11 +49,19 @@ impl Tree {
 
         // calculate the merkle root.
         let mut index = leaf_index;
-        while let Some(sibling_index) = sibling(index) {
-            let parent = parent(index).unwrap();
-            self.hasher.update(self.hashes[index].unwrap());
-            self.hasher.update(self.hashes[sibling_index].unwrap());
-            self.hashes[parent] = Some(self.hasher.finalize_reset());
+        while let Some((left, right)) = sibling(index) {
+            self.hasher.update(self.hashes[left].unwrap());
+            self.hasher.update(self.hashes[right].unwrap());
+            let hash = self.hasher.finalize_reset();
+            let parent = parent(left).unwrap();
+            trace!(
+                left_child = %left,
+                right_child = %right,
+                index = %parent,
+                ?hash,
+                "hash calculated",
+            );
+            self.hashes[parent] = Some(hash);
             index = parent;
         }
         Ok(())
@@ -141,13 +151,13 @@ fn parent(index: usize) -> Option<usize> {
     }
 }
 
-fn sibling(index: usize) -> Option<usize> {
+fn sibling(index: usize) -> Option<(usize, usize)> {
     if index == 0 {
         None
     } else if index & 0x1 == 0x1 {
-        Some(index - 1)
+        Some((index, index + 1))
     } else {
-        Some(index + 1)
+        Some((index - 1, index))
     }
 }
 
@@ -158,17 +168,44 @@ pub fn base(index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{base, index, pair, parent, TreeBuilder};
+    use super::{base, index, pair, parent, sibling, TreeBuilder};
     use hex_literal::hex;
     use std::num::NonZeroUsize;
 
-    const SAMPLE_LEAF: [u8; 32] =
-        hex!("abababababababababababababababababababababababababababababababab");
-    const SAMPLE_ROOT: [u8; 32] =
-        hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
+    #[test]
+    fn tree_set() {
+        const SAMPLE_LEAF_ZERO: [u8; 32] = [0x00u8; 32];
+        const SAMPLE_LEAF_ONE: [u8; 32] = [0x11u8; 32];
+        const SAMPLE_ROOT: [u8; 32] =
+            hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
+
+        let mut tree = TreeBuilder::new()
+            .initial_leaf(SAMPLE_LEAF_ZERO.into())
+            .build(NonZeroUsize::new(5).unwrap());
+        let mut leaves = vec![];
+        for i in 0..tree.leaves().len() {
+            let leaf = SAMPLE_LEAF_ONE
+                .iter()
+                .map(|x| *x * i as u8)
+                .collect::<super::Hash256>();
+            leaves.push(leaf);
+        }
+        for (i, leaf) in leaves.iter().enumerate() {
+            tree.set(i, *leaf).unwrap();
+        }
+        for (i, leaf) in tree.leaves().iter().enumerate() {
+            assert_eq!(leaf.unwrap(), leaves[i]);
+        }
+        assert_eq!(tree.root().unwrap(), SAMPLE_ROOT.into());
+    }
 
     #[test]
     fn tree_root() {
+        const SAMPLE_LEAF: [u8; 32] =
+            hex!("abababababababababababababababababababababababababababababababab");
+        const SAMPLE_ROOT: [u8; 32] =
+            hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
+
         let tree = TreeBuilder::new()
             .initial_leaf(SAMPLE_LEAF.into())
             .build(NonZeroUsize::new(1).unwrap());
@@ -302,6 +339,17 @@ mod tests {
         assert_eq!(parent(12), Some(5));
         assert_eq!(parent(13), Some(6));
         assert_eq!(parent(14), Some(6));
+    }
+
+    #[test]
+    fn test_siblig() {
+        assert_eq!(sibling(0), None);
+        assert_eq!(sibling(1), Some((1, 2)));
+        assert_eq!(sibling(2), Some((1, 2)));
+        assert_eq!(sibling(3), Some((3, 4)));
+        assert_eq!(sibling(4), Some((3, 4)));
+        assert_eq!(sibling(5), Some((5, 6)));
+        assert_eq!(sibling(6), Some((5, 6)));
     }
 
     #[test]
