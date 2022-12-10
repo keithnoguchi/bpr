@@ -2,12 +2,16 @@
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use sha3::{Digest, Sha3_256};
+use std::error::Error;
 use std::num::NonZeroUsize;
 use std::ops::{Deref, Range};
+use std::result;
 
+type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 type Hash256 = GenericArray<u8, U32>;
 
 pub struct Tree {
+    depth_index: usize,
     hasher: Sha3_256,
     leaves: Range<usize>,
     hashes: Vec<Option<Hash256>>,
@@ -29,6 +33,29 @@ impl Tree {
     pub fn leaves(&self) -> &[Option<Hash256>] {
         &self.hashes[self.leaves.start..self.leaves.end]
     }
+
+    pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
+        let leaf_index = index(self.depth_index, leaf_offset);
+        if !self.leaves.contains(&leaf_index) {
+            Err("invalid leaf offset")?;
+        }
+        // sanity check.
+        if self.hashes[leaf_index] == Some(hash) {
+            return Ok(());
+        }
+        self.hashes[leaf_index] = Some(hash);
+
+        // calculate the merkle root.
+        let mut index = leaf_index;
+        while let Some(sibling_index) = sibling(index) {
+            let parent = parent(index).unwrap();
+            self.hasher.update(self.hashes[index].unwrap());
+            self.hasher.update(self.hashes[sibling_index].unwrap());
+            self.hashes[parent] = Some(self.hasher.finalize_reset());
+            index = parent;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -49,6 +76,7 @@ impl TreeBuilder {
     pub fn build(mut self, depth: NonZeroUsize) -> Tree {
         let depth_index = usize::from(depth) - 1; // 0 base index.
         let mut tree = Tree {
+            depth_index,
             hasher: Sha3_256::new(),
             leaves: index(depth_index, 0)..Self::tree_size(depth),
             hashes: vec![None; Self::tree_size(depth)],
@@ -69,7 +97,10 @@ impl TreeBuilder {
             let child = tree.hashes[index].unwrap();
             tree.hasher.update(child);
             tree.hasher.update(child);
-            tree.hashes[parent] = Some(tree.hasher.finalize_reset());
+            let parent_hash = tree.hasher.finalize_reset();
+            tree.hashes[parent..index]
+                .iter_mut()
+                .for_each(|hash| *hash = Some(parent_hash));
             index = parent;
         }
         tree
@@ -80,14 +111,14 @@ impl TreeBuilder {
     }
 }
 
-pub fn index(depth: usize, offset: usize) -> usize {
+fn index(depth: usize, offset: usize) -> usize {
     let width = 0x1 << depth;
     assert!(offset < width, "invalid offset");
     width - 1 + offset
 }
 
-pub fn pair(index: usize) -> (usize, usize) {
-    // log2(index)
+// log2(index)
+fn pair(index: usize) -> (usize, usize) {
     let mut depth = 0;
     let mut x = index + 1;
     loop {
@@ -102,11 +133,21 @@ pub fn pair(index: usize) -> (usize, usize) {
     (depth, offset)
 }
 
-pub fn parent(index: usize) -> Option<usize> {
+fn parent(index: usize) -> Option<usize> {
     if index == 0 {
         None
     } else {
         Some((index - 1) >> 1)
+    }
+}
+
+fn sibling(index: usize) -> Option<usize> {
+    if index == 0 {
+        None
+    } else if index & 0x1 == 0x1 {
+        Some(index - 1)
+    } else {
+        Some(index + 1)
     }
 }
 
