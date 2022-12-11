@@ -47,9 +47,10 @@ impl Tree {
         // calculate the merkle root.
         let mut index = leaf_index;
         while let Some((left, right)) = siblings(index) {
-            self.hasher.update(self.hashes[left].unwrap());
-            self.hasher.update(self.hashes[right].unwrap());
-            let hash = self.hasher.finalize_reset();
+            let mut hasher = self.hasher.clone();
+            hasher.update(self.hash(left)?);
+            hasher.update(self.hash(right)?);
+            let hash = hasher.finalize_reset();
             let parent = parent(left).unwrap();
             trace!(
                 left_child = %left,
@@ -94,6 +95,13 @@ impl Tree {
             Err("invalid leaf offset")?;
         }
         Ok(leaf_index)
+    }
+
+    fn hash(&self, index: usize) -> Result<&Hash256> {
+        self.hashes
+            .get(index)
+            .and_then(|hash| hash.as_ref())
+            .ok_or_else(|| "missing hash".into())
     }
 }
 
