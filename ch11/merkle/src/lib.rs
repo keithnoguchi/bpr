@@ -37,10 +37,7 @@ impl Tree {
 
     #[instrument(name = "Tree::set", skip(self), err)]
     pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
-        let leaf_index = index(self.depth_index, 0) + leaf_offset;
-        if !self.leaves.contains(&leaf_index) {
-            Err("invalid leaf offset")?;
-        }
+        let leaf_index = self.leaf_index(leaf_offset)?;
         // sanity check.
         if self.hashes[leaf_index] == Some(hash) {
             return Ok(());
@@ -49,7 +46,7 @@ impl Tree {
 
         // calculate the merkle root.
         let mut index = leaf_index;
-        while let Some((left, right)) = sibling(index) {
+        while let Some((left, right)) = siblings(index) {
             self.hasher.update(self.hashes[left].unwrap());
             self.hasher.update(self.hashes[right].unwrap());
             let hash = self.hasher.finalize_reset();
@@ -65,6 +62,56 @@ impl Tree {
             index = parent;
         }
         Ok(())
+    }
+
+    pub fn proof(&self, leaf_offset: usize) -> Result<Vec<(Position, Hash256)>> {
+        let leaf_index = self.leaf_index(leaf_offset)?;
+        let mut proof = vec![];
+        match self.proof_pair(leaf_index) {
+            None => Err("missing hash for the leaf pair")?,
+            Some(pair) => {
+                proof.push(pair);
+            }
+        }
+        for ancester in ancesters(leaf_index) {
+            match self.proof_pair(ancester) {
+                Some(pair) => proof.push(pair),
+                None => break,
+            }
+        }
+        Ok(proof)
+    }
+
+    fn proof_pair(&self, index: usize) -> Option<(Position, Hash256)> {
+        sibling(index)
+            .and_then(|sibling| self.hashes[sibling])
+            .map(|hash| (Position::from(index), hash))
+    }
+
+    fn leaf_index(&self, leaf_offset: usize) -> Result<usize> {
+        let leaf_index = index(self.depth_index, 0) + leaf_offset;
+        if !self.leaves.contains(&leaf_index) {
+            Err("invalid leaf offset")?;
+        }
+        Ok(leaf_index)
+    }
+}
+
+pub enum Position {
+    Root,
+    Left,
+    Right,
+}
+
+impl From<usize> for Position {
+    fn from(index: usize) -> Self {
+        if index == 0 {
+            Self::Root
+        } else if index & 0x1 == 0x1 {
+            Self::Left
+        } else {
+            Self::Right
+        }
     }
 }
 
@@ -148,14 +195,31 @@ fn parent(index: usize) -> Option<usize> {
     }
 }
 
-fn sibling(index: usize) -> Option<(usize, usize)> {
-    if index == 0 {
-        None
-    } else if index & 0x1 == 0x1 {
-        Some((index, index + 1))
-    } else {
-        Some((index - 1, index))
+fn sibling(index: usize) -> Option<usize> {
+    match Position::from(index) {
+        Position::Root => None,
+        Position::Left => Some(index + 1),
+        Position::Right => Some(index - 1),
     }
+}
+
+fn siblings(index: usize) -> Option<(usize, usize)> {
+    sibling(index).map(|sibling| {
+        if index < sibling {
+            (index, sibling)
+        } else {
+            (sibling, index)
+        }
+    })
+}
+
+fn ancesters(mut index: usize) -> Vec<usize> {
+    let mut ancesters = vec![];
+    while let Some(parent) = parent(index) {
+        ancesters.push(parent);
+        index = parent;
+    }
+    ancesters
 }
 
 pub fn base(index: usize) -> usize {
@@ -165,7 +229,9 @@ pub fn base(index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{base, depth_and_offset, index, parent, sibling, TreeBuilder};
+    use super::TreeBuilder;
+    use super::{ancesters, parent, sibling, siblings};
+    use super::{base, depth_and_offset, index};
     use hex_literal::hex;
     use std::num::NonZeroUsize;
 
@@ -341,12 +407,58 @@ mod tests {
     #[test]
     fn test_siblig() {
         assert_eq!(sibling(0), None);
-        assert_eq!(sibling(1), Some((1, 2)));
-        assert_eq!(sibling(2), Some((1, 2)));
-        assert_eq!(sibling(3), Some((3, 4)));
-        assert_eq!(sibling(4), Some((3, 4)));
-        assert_eq!(sibling(5), Some((5, 6)));
-        assert_eq!(sibling(6), Some((5, 6)));
+        assert_eq!(sibling(1), Some(2));
+        assert_eq!(sibling(2), Some(1));
+        assert_eq!(sibling(3), Some(4));
+        assert_eq!(sibling(4), Some(3));
+        assert_eq!(sibling(5), Some(6));
+        assert_eq!(sibling(6), Some(5));
+    }
+
+    #[test]
+    fn test_sibligs() {
+        assert_eq!(siblings(0), None);
+        assert_eq!(siblings(1), Some((1, 2)));
+        assert_eq!(siblings(2), Some((1, 2)));
+        assert_eq!(siblings(3), Some((3, 4)));
+        assert_eq!(siblings(4), Some((3, 4)));
+        assert_eq!(siblings(5), Some((5, 6)));
+        assert_eq!(siblings(6), Some((5, 6)));
+    }
+
+    #[test]
+    fn test_ancesters() {
+        assert_eq!(ancesters(0), vec![]);
+        assert_eq!(ancesters(1), vec![0]);
+        assert_eq!(ancesters(2), vec![0]);
+        assert_eq!(ancesters(3), vec![1, 0]);
+        assert_eq!(ancesters(4), vec![1, 0]);
+        assert_eq!(ancesters(5), vec![2, 0]);
+        assert_eq!(ancesters(6), vec![2, 0]);
+        assert_eq!(ancesters(7), vec![3, 1, 0]);
+        assert_eq!(ancesters(8), vec![3, 1, 0]);
+        assert_eq!(ancesters(9), vec![4, 1, 0]);
+        assert_eq!(ancesters(10), vec![4, 1, 0]);
+        assert_eq!(ancesters(11), vec![5, 2, 0]);
+        assert_eq!(ancesters(12), vec![5, 2, 0]);
+        assert_eq!(ancesters(13), vec![6, 2, 0]);
+        assert_eq!(ancesters(14), vec![6, 2, 0]);
+        assert_eq!(ancesters(15), vec![7, 3, 1, 0]);
+        assert_eq!(ancesters(16), vec![7, 3, 1, 0]);
+        assert_eq!(ancesters(17), vec![8, 3, 1, 0]);
+        assert_eq!(ancesters(18), vec![8, 3, 1, 0]);
+        assert_eq!(ancesters(19), vec![9, 4, 1, 0]);
+        assert_eq!(ancesters(20), vec![9, 4, 1, 0]);
+        assert_eq!(ancesters(21), vec![10, 4, 1, 0]);
+        assert_eq!(ancesters(22), vec![10, 4, 1, 0]);
+        assert_eq!(ancesters(23), vec![11, 5, 2, 0]);
+        assert_eq!(ancesters(24), vec![11, 5, 2, 0]);
+        assert_eq!(ancesters(25), vec![12, 5, 2, 0]);
+        assert_eq!(ancesters(26), vec![12, 5, 2, 0]);
+        assert_eq!(ancesters(27), vec![13, 6, 2, 0]);
+        assert_eq!(ancesters(28), vec![13, 6, 2, 0]);
+        assert_eq!(ancesters(29), vec![14, 6, 2, 0]);
+        assert_eq!(ancesters(30), vec![14, 6, 2, 0]);
     }
 
     #[test]
