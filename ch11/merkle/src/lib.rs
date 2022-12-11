@@ -127,16 +127,13 @@ fn index(depth: usize, offset: usize) -> usize {
     width - 1 + offset
 }
 
-// log2(index)
-fn pair(index: usize) -> (usize, usize) {
+fn depth_and_offset(index: usize) -> (usize, usize) {
+    // log2(index)
     let mut depth = 0;
-    let mut x = index + 1;
-    loop {
-        x >>= 1;
-        if x == 0 {
-            break;
-        }
+    let mut x = (index + 1) >> 1;
+    while x != 0 {
         depth += 1;
+        x >>= 1;
     }
     let base = (0x1 << depth) - 1;
     let offset = index - base;
@@ -162,13 +159,13 @@ fn sibling(index: usize) -> Option<(usize, usize)> {
 }
 
 pub fn base(index: usize) -> usize {
-    let (depth, _) = pair(index);
-    (0x1 << depth) - 1
+    let (_, offset) = depth_and_offset(index);
+    index - offset
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{base, index, pair, parent, sibling, TreeBuilder};
+    use super::{base, depth_and_offset, index, parent, sibling, TreeBuilder};
     use hex_literal::hex;
     use std::num::NonZeroUsize;
 
@@ -304,22 +301,22 @@ mod tests {
     }
 
     #[test]
-    fn test_pair() {
-        assert_eq!(pair(0), (0, 0));
-        assert_eq!(pair(1), (1, 0));
-        assert_eq!(pair(2), (1, 1));
-        assert_eq!(pair(3), (2, 0));
-        assert_eq!(pair(4), (2, 1));
-        assert_eq!(pair(5), (2, 2));
-        assert_eq!(pair(6), (2, 3));
-        assert_eq!(pair(7), (3, 0));
-        assert_eq!(pair(8), (3, 1));
-        assert_eq!(pair(9), (3, 2));
-        assert_eq!(pair(10), (3, 3));
-        assert_eq!(pair(11), (3, 4));
-        assert_eq!(pair(12), (3, 5));
-        assert_eq!(pair(13), (3, 6));
-        assert_eq!(pair(14), (3, 7));
+    fn test_depth_and_offset() {
+        assert_eq!(depth_and_offset(0), (0, 0));
+        assert_eq!(depth_and_offset(1), (1, 0));
+        assert_eq!(depth_and_offset(2), (1, 1));
+        assert_eq!(depth_and_offset(3), (2, 0));
+        assert_eq!(depth_and_offset(4), (2, 1));
+        assert_eq!(depth_and_offset(5), (2, 2));
+        assert_eq!(depth_and_offset(6), (2, 3));
+        assert_eq!(depth_and_offset(7), (3, 0));
+        assert_eq!(depth_and_offset(8), (3, 1));
+        assert_eq!(depth_and_offset(9), (3, 2));
+        assert_eq!(depth_and_offset(10), (3, 3));
+        assert_eq!(depth_and_offset(11), (3, 4));
+        assert_eq!(depth_and_offset(12), (3, 5));
+        assert_eq!(depth_and_offset(13), (3, 6));
+        assert_eq!(depth_and_offset(14), (3, 7));
     }
 
     #[test]
