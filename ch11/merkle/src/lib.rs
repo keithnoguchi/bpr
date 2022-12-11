@@ -97,6 +97,7 @@ impl Tree {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Position {
     Root,
     Left,
@@ -229,37 +230,41 @@ pub fn base(index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::TreeBuilder;
     use super::{ancesters, parent, sibling, siblings};
     use super::{base, depth_and_offset, index};
+    use super::{Position, Tree, TreeBuilder};
     use hex_literal::hex;
     use std::num::NonZeroUsize;
 
     #[test]
-    fn tree_set() {
-        const SAMPLE_LEAF_ZERO: [u8; 32] = [0x00u8; 32];
-        const SAMPLE_LEAF_ONE: [u8; 32] = [0x11u8; 32];
-        const SAMPLE_ROOT: [u8; 32] =
-            hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
+    fn tree_proof() {
+        let tree = TestTreeBuilder::new().depth(5).build();
 
-        let mut tree = TreeBuilder::new()
-            .initial_leaf(SAMPLE_LEAF_ZERO.into())
-            .build(NonZeroUsize::new(5).unwrap());
-        let mut leaves = vec![];
-        for i in 0..tree.leaves().len() {
-            let leaf = SAMPLE_LEAF_ONE
-                .iter()
-                .map(|x| *x * i as u8)
-                .collect::<super::Hash256>();
-            leaves.push(leaf);
-        }
-        for (i, leaf) in leaves.iter().enumerate() {
-            tree.set(i, *leaf).unwrap();
-        }
-        for (i, leaf) in tree.leaves().iter().enumerate() {
-            assert_eq!(leaf.unwrap(), leaves[i]);
-        }
-        assert_eq!(tree.root().unwrap(), SAMPLE_ROOT.into());
+        let got = tree.proof(3).unwrap();
+        assert_eq!(got.len(), 4);
+        assert_eq!(got[0].0, Position::Right);
+        assert_eq!(got[0].1, [0x22; 32].into());
+        assert_eq!(got[1].0, Position::Right);
+        assert_eq!(
+            got[1].1,
+            hex!("35e794f1b42c224a8e390ce37e141a8d74aa53e151c1d1b9a03f88c65adb9e10").into(),
+        );
+        assert_eq!(got[2].0, Position::Left);
+        assert_eq!(
+            got[2].1,
+            hex!("26fca7737f48fa702664c8b468e34c858e62f51762386bd0bddaa7050e0dd7c0").into(),
+        );
+        assert_eq!(got[3].0, Position::Left);
+        assert_eq!(
+            got[3].1,
+            hex!("e7e11a86a0c1d8d8624b1629cb58e39bb4d0364cb8cb33c4029662ab30336858").into(),
+        );
+    }
+
+    #[test]
+    fn tree_set() {
+        let tree = TestTreeBuilder::new().depth(5).build();
+        assert_eq!(tree.root().unwrap(), TestTreeBuilder::SAMPLE_ROOT.into());
     }
 
     #[test]
@@ -478,5 +483,48 @@ mod tests {
         assert_eq!(base(12), 7);
         assert_eq!(base(13), 7);
         assert_eq!(base(14), 7);
+    }
+
+    struct TestTreeBuilder {
+        builder: TreeBuilder,
+        depth: NonZeroUsize,
+    }
+
+    impl TestTreeBuilder {
+        const SAMPLE_LEAF_ZERO: [u8; 32] = [0x00; 32];
+        const SAMPLE_LEAF_ONE: [u8; 32] = [0x11; 32];
+        const SAMPLE_ROOT: [u8; 32] =
+            hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
+
+        fn new() -> Self {
+            Self {
+                builder: TreeBuilder::new(),
+                depth: NonZeroUsize::new(1).unwrap(),
+            }
+        }
+
+        fn depth(mut self, depth: usize) -> Self {
+            self.depth = NonZeroUsize::new(depth).unwrap();
+            self
+        }
+
+        fn build(self) -> Tree {
+            let mut tree = self
+                .builder
+                .initial_leaf(Self::SAMPLE_LEAF_ZERO.into())
+                .build(self.depth);
+            let mut leaves = vec![];
+            for i in 0..tree.leaves().len() {
+                let leaf = Self::SAMPLE_LEAF_ONE
+                    .iter()
+                    .map(|x| *x * i as u8)
+                    .collect::<super::Hash256>();
+                leaves.push(leaf);
+            }
+            for (i, leaf) in leaves.iter().enumerate() {
+                tree.set(i, *leaf).unwrap();
+            }
+            tree
+        }
     }
 }
