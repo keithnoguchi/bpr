@@ -3,8 +3,7 @@ use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use sha3::{Digest, Sha3_256};
 use std::error::Error;
-use std::num::NonZeroUsize;
-use std::ops::{Deref, Range};
+use std::ops::Range;
 use std::result;
 use tracing::{instrument, trace};
 
@@ -12,27 +11,34 @@ type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub type Hash256 = GenericArray<u8, U32>;
 
 pub struct Tree {
-    depth_index: usize,
     hasher: Sha3_256,
-    leaves: Range<usize>,
     hashes: Vec<Option<Hash256>>,
 }
 
-impl Deref for Tree {
-    type Target = [Option<Hash256>];
+pub struct Iter<'a> {
+    cursor: Range<usize>,
+    hashes: &'a [Option<Hash256>],
+}
 
-    fn deref(&self) -> &Self::Target {
-        &self.hashes[..]
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a Hash256;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cursor = self.cursor.start;
+        self.cursor
+            .next()
+            .and_then(|_| self.hashes[cursor].as_ref())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.cursor.end - self.cursor.start;
+        (size, Some(size))
     }
 }
 
 impl Tree {
     pub fn root(&self) -> Option<Hash256> {
-        self[0]
-    }
-
-    pub fn leaves(&self) -> &[Option<Hash256>] {
-        &self.hashes[self.leaves.start..self.leaves.end]
+        self.hashes[0]
     }
 
     #[instrument(name = "Tree::set", skip(self), err)]
@@ -90,11 +96,53 @@ impl Tree {
     }
 
     fn leaf_index(&self, leaf_offset: usize) -> Result<usize> {
-        let leaf_index = index(self.depth_index, 0) + leaf_offset;
-        if !self.leaves.contains(&leaf_index) {
+        let leaf_range = self.leaf_range();
+        let leaf_index = leaf_range.start + leaf_offset;
+        if !leaf_range.contains(&leaf_index) {
             Err("invalid leaf offset")?;
         }
         Ok(leaf_index)
+    }
+
+    pub fn hashes(&self) -> Iter {
+        Iter {
+            cursor: self.node_range(),
+            hashes: &self.hashes,
+        }
+    }
+
+    pub fn leaves(&self) -> Iter {
+        Iter {
+            cursor: self.leaf_range(),
+            hashes: &self.hashes,
+        }
+    }
+
+    fn node_range(&self) -> Range<usize> {
+        self.index_range(0).unwrap()
+    }
+
+    fn leaf_range(&self) -> Range<usize> {
+        self.index_range(self.depth()).unwrap()
+    }
+
+    fn index_range(&self, depth: usize) -> Option<Range<usize>> {
+        match depth {
+            depth if depth > self.depth() => None,
+            0 => Some(Range {
+                start: 0,
+                end: self.hashes.len(),
+            }),
+            _ => {
+                let start = (1 << (depth - 1)) - 1;
+                let end = (1 << depth) - 1;
+                Some(Range { start, end })
+            }
+        }
+    }
+
+    fn depth(&self) -> usize {
+        self.hashes.len().trailing_ones() as usize
     }
 
     fn hash(&self, index: usize) -> Result<&Hash256> {
@@ -139,13 +187,11 @@ impl TreeBuilder {
         self
     }
 
-    pub fn build(mut self, depth: NonZeroUsize) -> Tree {
-        let depth_index = usize::from(depth) - 1; // 0 base index.
+    pub fn build(mut self, depth: usize) -> Tree {
+        let tree_size = if depth == 0 { 0 } else { (1 << depth) - 1 };
         let mut tree = Tree {
-            depth_index,
             hasher: Sha3_256::new(),
-            leaves: index(depth_index, 0)..Self::tree_size(depth),
-            hashes: vec![None; Self::tree_size(depth)],
+            hashes: vec![None; tree_size],
         };
 
         // setup the initial hash.
@@ -153,12 +199,12 @@ impl TreeBuilder {
             None => return tree,
             Some(initial_leaf) => initial_leaf,
         };
-        let mut index = tree.leaves.start;
-        tree.hashes[tree.leaves.start..tree.leaves.end]
-            .iter_mut()
-            .for_each(|hash| *hash = Some(initial_leaf));
+        tree.leaf_range()
+            .into_iter()
+            .for_each(|index| tree.hashes[index] = Some(initial_leaf));
 
         // calculate parent hashes all the way to the root.
+        let mut index = tree.leaf_range().start;
         while let Some(parent) = parent(index) {
             let child = tree.hashes[index].unwrap();
             tree.hasher.update(child);
@@ -171,13 +217,9 @@ impl TreeBuilder {
         }
         tree
     }
-
-    fn tree_size(depth: NonZeroUsize) -> usize {
-        (0x1 << usize::from(depth)) - 1
-    }
 }
 
-fn index(depth: usize, offset: usize) -> usize {
+pub fn index(depth: usize, offset: usize) -> usize {
     let width = 0x1 << depth;
     assert!(offset < width, "invalid offset");
     width - 1 + offset
@@ -242,11 +284,11 @@ mod tests {
     use super::{base, depth_and_offset, index};
     use super::{Position, Tree, TreeBuilder};
     use hex_literal::hex;
-    use std::num::NonZeroUsize;
+    use std::ops::Range;
 
     #[test]
     fn tree_proof() {
-        let tree = TestTreeBuilder::new().depth(5).build();
+        let tree = TestTreeBuilder::build(5);
 
         let got = tree.proof(3).unwrap();
         assert_eq!(got.len(), 4);
@@ -271,7 +313,7 @@ mod tests {
 
     #[test]
     fn tree_set() {
-        let tree = TestTreeBuilder::new().depth(5).build();
+        let tree = TestTreeBuilder::build(5);
         assert_eq!(tree.root().unwrap(), TestTreeBuilder::SAMPLE_ROOT.into());
     }
 
@@ -282,74 +324,70 @@ mod tests {
         const SAMPLE_ROOT: [u8; 32] =
             hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
 
-        let tree = TreeBuilder::new()
-            .initial_leaf(SAMPLE_LEAF.into())
-            .build(NonZeroUsize::new(1).unwrap());
+        let tree = TreeBuilder::new().initial_leaf(SAMPLE_LEAF.into()).build(1);
         assert_eq!(tree.root(), Some(SAMPLE_LEAF.into()));
         let tree = TreeBuilder::new()
             .initial_leaf(SAMPLE_LEAF.into())
-            .build(NonZeroUsize::new(20).unwrap());
+            .build(20);
         assert_eq!(tree.root(), Some(SAMPLE_ROOT.into()));
     }
 
     #[test]
-    fn tree_len() {
+    fn tree_hashes_count() {
+        assert_eq!(TestTreeBuilder::build(1).hashes().count(), 1);
+        assert_eq!(TestTreeBuilder::build(2).hashes().count(), 3);
+        assert_eq!(TestTreeBuilder::build(3).hashes().count(), 7);
+        assert_eq!(TestTreeBuilder::build(4).hashes().count(), 15);
+        assert_eq!(TestTreeBuilder::build(5).hashes().count(), 31);
+    }
+
+    #[test]
+    fn tree_leaves_count() {
+        assert_eq!(TestTreeBuilder::build(1).leaves().count(), 1);
+        assert_eq!(TestTreeBuilder::build(2).leaves().count(), 2);
+        assert_eq!(TestTreeBuilder::build(3).leaves().count(), 4);
+        assert_eq!(TestTreeBuilder::build(4).leaves().count(), 8);
+    }
+
+    #[test]
+    fn tree_node_range() {
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(1).unwrap())
-                .len(),
-            1
+            TestTreeBuilder::build(1).node_range(),
+            Range { start: 0, end: 1 },
         );
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(2).unwrap())
-                .len(),
-            3
+            TestTreeBuilder::build(2).node_range(),
+            Range { start: 0, end: 3 },
         );
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(3).unwrap())
-                .len(),
-            7
-        );
-        assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(4).unwrap())
-                .len(),
-            15
+            TestTreeBuilder::build(5).node_range(),
+            Range { start: 0, end: 31 },
         );
     }
 
     #[test]
-    fn tree_leaves_len() {
+    fn tree_leaf_range() {
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(1).unwrap())
-                .leaves()
-                .len(),
-            1
+            TestTreeBuilder::build(1).leaf_range(),
+            Range { start: 0, end: 1 },
         );
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(2).unwrap())
-                .leaves()
-                .len(),
-            2
+            TestTreeBuilder::build(2).leaf_range(),
+            Range { start: 1, end: 3 },
         );
         assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(3).unwrap())
-                .leaves()
-                .len(),
-            4
+            TestTreeBuilder::build(5).leaf_range(),
+            Range { start: 15, end: 31 },
         );
-        assert_eq!(
-            TreeBuilder::new()
-                .build(NonZeroUsize::new(4).unwrap())
-                .leaves()
-                .len(),
-            8
-        );
+    }
+
+    #[test]
+    fn tree_depth() {
+        assert_eq!(TestTreeBuilder::build(1).depth(), 1);
+        assert_eq!(TestTreeBuilder::build(2).depth(), 2);
+        assert_eq!(TestTreeBuilder::build(3).depth(), 3);
+        assert_eq!(TestTreeBuilder::build(4).depth(), 4);
+        assert_eq!(TestTreeBuilder::build(5).depth(), 5);
     }
 
     #[test]
@@ -493,10 +531,7 @@ mod tests {
         assert_eq!(base(14), 7);
     }
 
-    struct TestTreeBuilder {
-        builder: TreeBuilder,
-        depth: NonZeroUsize,
-    }
+    struct TestTreeBuilder;
 
     impl TestTreeBuilder {
         const SAMPLE_LEAF_ZERO: [u8; 32] = [0x00; 32];
@@ -504,33 +539,20 @@ mod tests {
         const SAMPLE_ROOT: [u8; 32] =
             hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
 
-        fn new() -> Self {
-            Self {
-                builder: TreeBuilder::new(),
-                depth: NonZeroUsize::new(1).unwrap(),
-            }
-        }
-
-        fn depth(mut self, depth: usize) -> Self {
-            self.depth = NonZeroUsize::new(depth).unwrap();
-            self
-        }
-
-        fn build(self) -> Tree {
-            let mut tree = self
-                .builder
+        fn build(depth: usize) -> Tree {
+            let mut tree = TreeBuilder::new()
                 .initial_leaf(Self::SAMPLE_LEAF_ZERO.into())
-                .build(self.depth);
+                .build(depth);
             let mut leaves = vec![];
-            for i in 0..tree.leaves().len() {
+            for i in 0..tree.leaves().count() {
                 let leaf = Self::SAMPLE_LEAF_ONE
                     .iter()
                     .map(|x| *x * i as u8)
                     .collect::<super::Hash256>();
                 leaves.push(leaf);
             }
-            for (i, leaf) in leaves.iter().enumerate() {
-                tree.set(i, *leaf).unwrap();
+            for (i, leaf) in leaves.into_iter().enumerate() {
+                tree.set(i, leaf).unwrap();
             }
             tree
         }
