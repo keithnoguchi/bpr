@@ -92,6 +92,11 @@ impl Tree {
         &self.hashes[range.start..range.end]
     }
 
+    pub fn leaves_mut(&mut self) -> &mut [Option<Hash256>] {
+        let range = self.leaf_range();
+        &mut self.hashes[range.start..range.end]
+    }
+
     #[inline]
     fn leaf_range(&self) -> Range<usize> {
         self.index_range(self.depth()).unwrap()
@@ -170,9 +175,9 @@ impl TreeBuilder {
             None => return tree,
             Some(initial_leaf) => initial_leaf,
         };
-        tree.leaf_range()
-            .into_iter()
-            .for_each(|index| tree.hashes[index] = Some(initial_leaf));
+        tree.leaves_mut()
+            .iter_mut()
+            .for_each(|hash| *hash = Some(initial_leaf));
 
         // calculate parent hashes all the way to the root.
         let mut index = tree.leaf_range().start;
