@@ -15,27 +15,6 @@ pub struct Tree {
     hashes: Vec<Option<Hash256>>,
 }
 
-pub struct Iter<'a> {
-    cursor: Range<usize>,
-    hashes: &'a [Option<Hash256>],
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = &'a Hash256;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let cursor = self.cursor.start;
-        self.cursor
-            .next()
-            .and_then(|_| self.hashes[cursor].as_ref())
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.cursor.end - self.cursor.start;
-        (size, Some(size))
-    }
-}
-
 impl Tree {
     pub fn root(&self) -> Option<Hash256> {
         self.hashes[0]
@@ -104,24 +83,16 @@ impl Tree {
         Ok(leaf_index)
     }
 
-    pub fn hashes(&self) -> Iter {
-        Iter {
-            cursor: self.node_range(),
-            hashes: &self.hashes,
-        }
+    pub fn hashes(&self) -> &[Option<Hash256>] {
+        &self.hashes[..]
     }
 
-    pub fn leaves(&self) -> Iter {
-        Iter {
-            cursor: self.leaf_range(),
-            hashes: &self.hashes,
-        }
+    pub fn leaves(&self) -> &[Option<Hash256>] {
+        let range = self.leaf_range();
+        &self.hashes[range.start..range.end]
     }
 
-    fn node_range(&self) -> Range<usize> {
-        self.index_range(0).unwrap()
-    }
-
+    #[inline]
     fn leaf_range(&self) -> Range<usize> {
         self.index_range(self.depth()).unwrap()
     }
@@ -333,36 +304,20 @@ mod tests {
     }
 
     #[test]
-    fn tree_hashes_count() {
-        assert_eq!(TestTreeBuilder::build(1).hashes().count(), 1);
-        assert_eq!(TestTreeBuilder::build(2).hashes().count(), 3);
-        assert_eq!(TestTreeBuilder::build(3).hashes().count(), 7);
-        assert_eq!(TestTreeBuilder::build(4).hashes().count(), 15);
-        assert_eq!(TestTreeBuilder::build(5).hashes().count(), 31);
+    fn tree_hashes_len() {
+        assert_eq!(TestTreeBuilder::build(1).hashes().len(), 1);
+        assert_eq!(TestTreeBuilder::build(2).hashes().len(), 3);
+        assert_eq!(TestTreeBuilder::build(3).hashes().len(), 7);
+        assert_eq!(TestTreeBuilder::build(4).hashes().len(), 15);
+        assert_eq!(TestTreeBuilder::build(5).hashes().len(), 31);
     }
 
     #[test]
-    fn tree_leaves_count() {
-        assert_eq!(TestTreeBuilder::build(1).leaves().count(), 1);
-        assert_eq!(TestTreeBuilder::build(2).leaves().count(), 2);
-        assert_eq!(TestTreeBuilder::build(3).leaves().count(), 4);
-        assert_eq!(TestTreeBuilder::build(4).leaves().count(), 8);
-    }
-
-    #[test]
-    fn tree_node_range() {
-        assert_eq!(
-            TestTreeBuilder::build(1).node_range(),
-            Range { start: 0, end: 1 },
-        );
-        assert_eq!(
-            TestTreeBuilder::build(2).node_range(),
-            Range { start: 0, end: 3 },
-        );
-        assert_eq!(
-            TestTreeBuilder::build(5).node_range(),
-            Range { start: 0, end: 31 },
-        );
+    fn tree_leaves_len() {
+        assert_eq!(TestTreeBuilder::build(1).leaves().len(), 1);
+        assert_eq!(TestTreeBuilder::build(2).leaves().len(), 2);
+        assert_eq!(TestTreeBuilder::build(3).leaves().len(), 4);
+        assert_eq!(TestTreeBuilder::build(4).leaves().len(), 8);
     }
 
     #[test]
@@ -544,7 +499,7 @@ mod tests {
                 .initial_leaf(Self::SAMPLE_LEAF_ZERO.into())
                 .build(depth);
             let mut leaves = vec![];
-            for i in 0..tree.leaves().count() {
+            for i in 0..tree.leaves().len() {
                 let leaf = Self::SAMPLE_LEAF_ONE
                     .iter()
                     .map(|x| *x * i as u8)

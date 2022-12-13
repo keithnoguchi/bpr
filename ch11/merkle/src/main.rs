@@ -22,11 +22,11 @@ fn main() {
         .initial_leaf(NR_LEAF.into())
         .build(depth);
 
-    for (i, leave) in tree.leaves().take(4).enumerate() {
+    for (i, leave) in tree.leaves().iter().take(4).enumerate() {
         println!("leave[{i}]={:x?}", leave);
     }
-    if tree.leaves().count() > 4 {
-        println!("truncated {} leaves...", tree.leaves().count() - 4);
+    if tree.leaves().len() > 4 {
+        println!("truncated {} leaves...", tree.leaves().len() - 4);
     }
     println!("tree.root={:x?}", tree.root());
 
@@ -44,7 +44,7 @@ fn set_leaves(mut tree: merkle::Tree) {
     println!("\nset_leaves\n");
     const SAMPLE_LEAF_ONE: [u8; 32] = [0x11; 32];
     let mut leaves = vec![];
-    for i in 0..tree.leaves().count() {
+    for i in 0..tree.leaves().len() {
         let leaf = SAMPLE_LEAF_ONE
             .iter()
             .map(|x| *x * i as u8)
@@ -54,8 +54,12 @@ fn set_leaves(mut tree: merkle::Tree) {
     for (i, leaf) in leaves.iter().enumerate() {
         tree.set(i, *leaf).unwrap();
     }
-    for (i, leaf) in tree.leaves().enumerate() {
-        info!("leaves[{i}]={:02x?}", leaf);
-    }
+    tree.leaves()
+        .iter()
+        .map(|leaf| leaf.unwrap())
+        .enumerate()
+        .for_each(|(i, leaf)| {
+            info!("leaves[{i}]={:02x?}", leaf);
+        });
     info!("tree.root={:02x?}", tree.root());
 }
