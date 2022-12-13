@@ -30,9 +30,8 @@ fn main() {
     }
     println!("tree.root={:x?}", tree.root());
 
-    const LEAF_ZERO: [u8; 32] = [0; 32];
     let tree = merkle::TreeBuilder::new()
-        .initial_leaf(LEAF_ZERO.into())
+        .initial_leaf([0u8; 32].into())
         .build(depth);
     if depth < 6 {
         set_leaves(tree)
@@ -42,24 +41,22 @@ fn main() {
 #[instrument(skip(tree))]
 fn set_leaves(mut tree: merkle::Tree) {
     println!("\nset_leaves\n");
-    const SAMPLE_LEAF_ONE: [u8; 32] = [0x11; 32];
-    let mut leaves = vec![];
-    for i in 0..tree.leaves().count() {
-        let leaf = SAMPLE_LEAF_ONE
-            .iter()
-            .map(|x| *x * i as u8)
-            .collect::<merkle::Hash256>();
-        leaves.push(leaf);
-    }
-    for (i, leaf) in leaves.into_iter().enumerate() {
-        tree.set(i, leaf).unwrap();
-    }
+
+    // set the leaves.
+    (0..tree.leaves().count()).for_each(|i| {
+        let hash = [0x11u8 * i as u8; 32];
+        tree.set(i, hash.into()).unwrap();
+    });
+
+    // print out the leaves.
     for (i, leaf) in tree.leaves().enumerate() {
         match leaf {
             None => warn!("missing leave[offset={i}]"),
             Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),
         }
     }
+
+    // print out the root.
     match tree.root() {
         None => warn!("missing root"),
         Some(root) => info!("tree.root={:02x?}", root),
