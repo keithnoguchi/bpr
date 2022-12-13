@@ -1,7 +1,7 @@
 //! Merkle Tree
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 const NR_DEPTH: usize = 20;
 const NR_LEAF: [u8; 32] = [0xab; 32];
@@ -22,11 +22,11 @@ fn main() {
         .initial_leaf(NR_LEAF.into())
         .build(depth);
 
-    for (i, leave) in tree.leaves().iter().take(4).enumerate() {
+    for (i, leave) in tree.leaves().take(4).enumerate() {
         println!("leave[{i}]={:x?}", leave);
     }
-    if tree.leaves().len() > 4 {
-        println!("truncated {} leaves...", tree.leaves().len() - 4);
+    if tree.leaves().count() > 4 {
+        println!("truncated {} leaves...", tree.leaves().count() - 4);
     }
     println!("tree.root={:x?}", tree.root());
 
@@ -44,22 +44,24 @@ fn set_leaves(mut tree: merkle::Tree) {
     println!("\nset_leaves\n");
     const SAMPLE_LEAF_ONE: [u8; 32] = [0x11; 32];
     let mut leaves = vec![];
-    for i in 0..tree.leaves().len() {
+    for i in 0..tree.leaves().count() {
         let leaf = SAMPLE_LEAF_ONE
             .iter()
             .map(|x| *x * i as u8)
             .collect::<merkle::Hash256>();
         leaves.push(leaf);
     }
-    for (i, leaf) in leaves.iter().enumerate() {
-        tree.set(i, *leaf).unwrap();
+    for (i, leaf) in leaves.into_iter().enumerate() {
+        tree.set(i, leaf).unwrap();
     }
-    tree.leaves()
-        .iter()
-        .map(|leaf| leaf.unwrap())
-        .enumerate()
-        .for_each(|(i, leaf)| {
-            info!("leaves[{i}]={:02x?}", leaf);
-        });
-    info!("tree.root={:02x?}", tree.root());
+    for (i, leaf) in tree.leaves().enumerate() {
+        match leaf {
+            None => warn!("missing leave[offset={i}]"),
+            Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),
+        }
+    }
+    match tree.root() {
+        None => warn!("missing root"),
+        Some(root) => info!("tree.root={:02x?}", root),
+    }
 }

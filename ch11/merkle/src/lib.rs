@@ -87,9 +87,9 @@ impl Tree {
         &self.hashes[..]
     }
 
-    pub fn leaves(&self) -> &[Option<Hash256>] {
+    pub fn leaves(&self) -> impl Iterator<Item = &Option<Hash256>> {
         let range = self.leaf_range();
-        &self.hashes[range.start..range.end]
+        self.hashes[range.start..range.end].iter()
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Hash256>> {
@@ -317,11 +317,11 @@ mod tests {
     }
 
     #[test]
-    fn tree_leaves_len() {
-        assert_eq!(TestTreeBuilder::build(1).leaves().len(), 1);
-        assert_eq!(TestTreeBuilder::build(2).leaves().len(), 2);
-        assert_eq!(TestTreeBuilder::build(3).leaves().len(), 4);
-        assert_eq!(TestTreeBuilder::build(4).leaves().len(), 8);
+    fn tree_leaves_count() {
+        assert_eq!(TestTreeBuilder::build(1).leaves().count(), 1);
+        assert_eq!(TestTreeBuilder::build(2).leaves().count(), 2);
+        assert_eq!(TestTreeBuilder::build(3).leaves().count(), 4);
+        assert_eq!(TestTreeBuilder::build(4).leaves().count(), 8);
     }
 
     #[test]
@@ -503,7 +503,7 @@ mod tests {
                 .initial_leaf(Self::SAMPLE_LEAF_ZERO.into())
                 .build(depth);
             let mut leaves = vec![];
-            for i in 0..tree.leaves().len() {
+            for i in 0..tree.leaves().count() {
                 let leaf = Self::SAMPLE_LEAF_ONE
                     .iter()
                     .map(|x| *x * i as u8)
