@@ -81,9 +81,9 @@ impl MerkleTree {
         self.hashes[0]
     }
 
+    #[inline]
     pub fn leaves(&self) -> impl Iterator<Item = &Option<Hash256>> {
-        let range = self.leaf_range();
-        self.hashes[range.start..range.end].iter()
+        self.iter()
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Hash256>> {
