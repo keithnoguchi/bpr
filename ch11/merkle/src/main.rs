@@ -1,4 +1,5 @@
 //! Merkle Tree
+use merkle::MerkleTreeBuilder;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::{info, instrument, warn};
@@ -18,7 +19,7 @@ fn main() {
 
     println!("{:?}: depth={depth}", progname.file_name().unwrap());
 
-    let tree = merkle::TreeBuilder::new()
+    let tree = MerkleTreeBuilder::new()
         .initial_leaf(NR_LEAF.into())
         .build(depth);
     println!("{tree:?}");
@@ -31,26 +32,25 @@ fn main() {
     }
     println!("tree.root={:x?}", tree.root());
 
-    let tree = merkle::TreeBuilder::new()
-        .initial_leaf([0u8; 32].into())
-        .build(depth);
     if depth < 6 {
-        set_leaves(tree)
+        set_leaves(depth)
     }
 }
 
-#[instrument(skip(tree))]
-fn set_leaves(mut tree: merkle::Tree) {
-    println!("\nset_leaves\n");
+#[instrument]
+fn set_leaves(depth: usize) {
+    let mut tree = MerkleTreeBuilder::new()
+        .initial_leaf([0u8; 32].into())
+        .build(depth);
 
     // set the leaves.
-    (0..tree.leaves().count()).for_each(|i| {
+    for i in 0..tree.len() {
         let hash = [0x11u8 * i as u8; 32];
         tree.set(i, hash.into()).unwrap();
-    });
+    }
 
     // print out the leaves.
-    for (i, leaf) in tree.leaves().enumerate() {
+    for (i, leaf) in tree.iter().enumerate() {
         match leaf {
             None => warn!("missing leaf[offset={i}]"),
             Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),
