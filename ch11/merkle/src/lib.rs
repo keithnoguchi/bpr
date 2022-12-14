@@ -95,14 +95,6 @@ impl MerkleTree {
         self.hashes[..].iter()
     }
 
-    fn try_hashes_in_depth_mut(
-        &mut self,
-        depth: usize,
-    ) -> Result<impl Iterator<Item = &mut Option<Hash256>>> {
-        let range = self.depth_range(depth).ok_or("invalid depth")?;
-        Ok(self.hashes[range.start..range.end].iter_mut())
-    }
-
     #[instrument(name = "MerkleTree::set", skip(self), err)]
     pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
         let leaf = match self.leaves_mut().nth(leaf_offset) {
@@ -174,6 +166,32 @@ impl MerkleTree {
         self.depth_range(self.depth).unwrap()
     }
 
+    fn set_initial_leaf(&mut self, initial_leaf: &Hash256) {
+        self.leaves_mut()
+            .for_each(|leaf| *leaf = Some(*initial_leaf));
+
+        // update all the way to the root.
+        let mut child_hash = *initial_leaf;
+        for depth in (1..self.depth).rev() {
+            self.hasher.update(child_hash);
+            self.hasher.update(child_hash);
+            let hash = self.hasher.finalize_reset();
+            // it's safe to unwrap here as depth is in the valid range.
+            self.try_hashes_in_depth_mut(depth)
+                .unwrap()
+                .for_each(|node| *node = Some(hash));
+            child_hash = hash;
+        }
+    }
+
+    fn try_hashes_in_depth_mut(
+        &mut self,
+        depth: usize,
+    ) -> Result<impl Iterator<Item = &mut Option<Hash256>>> {
+        let range = self.depth_range(depth).ok_or("invalid depth")?;
+        Ok(self.hashes[range.start..range.end].iter_mut())
+    }
+
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
         match depth {
             depth if depth > self.depth => {
@@ -235,29 +253,15 @@ impl MerkleTreeBuilder {
     }
 
     pub fn build(mut self, depth: usize) -> MerkleTree {
-        let mut tree = MerkleTree::with_depth(depth);
-
         // setup the initial hash.
-        let initial_leaf = match self.initial_leaf.take() {
-            None => return tree,
-            Some(initial_leaf) => initial_leaf,
-        };
-        tree.leaves_mut()
-            .for_each(|leaf| *leaf = Some(initial_leaf));
-
-        // calculate parent hashes all the way to the root.
-        let mut child_hash = initial_leaf;
-        for depth in (1..depth).rev() {
-            tree.hasher.update(child_hash);
-            tree.hasher.update(child_hash);
-            let hash = tree.hasher.finalize_reset();
-            // it's safe to unwrap as depth is in the range.
-            tree.try_hashes_in_depth_mut(depth)
-                .unwrap()
-                .for_each(|node| *node = Some(hash));
-            child_hash = hash;
+        let mut tree = MerkleTree::with_depth(depth);
+        match self.initial_leaf.take() {
+            None => tree,
+            Some(initial_leaf) => {
+                tree.set_initial_leaf(&initial_leaf);
+                tree
+            }
         }
-        tree
     }
 }
 
