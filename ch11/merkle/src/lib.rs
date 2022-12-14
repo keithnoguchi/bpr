@@ -49,15 +49,18 @@ impl Tree {
 
     #[instrument(name = "Tree::set", skip(self), err)]
     pub fn set(&mut self, leaf_offset: usize, hash: Hash256) -> Result<()> {
-        let leaf_index = self.leaf_index(leaf_offset)?;
-        // sanity check.
-        if self.hashes[leaf_index] == Some(hash) {
+        let leaf = match self.leaves_mut().nth(leaf_offset) {
+            None => Err("invalid leaf offset")?,
+            Some(leaf) => leaf,
+        };
+        if *leaf == Some(hash) {
+            // no change.
             return Ok(());
         }
-        self.hashes[leaf_index] = Some(hash);
+        *leaf = Some(hash);
 
         // calculate the merkle root.
-        let mut index = leaf_index;
+        let mut index = self.leaf_range().start + leaf_offset;
         while let Some((left, right)) = siblings(index) {
             let mut hasher = self.hasher.clone();
             hasher.update(self.hash(left)?);
