@@ -37,7 +37,7 @@ impl Debug for MerkleTree {
         f.debug_struct("MerkleTree")
             .field("depth", &self.depth)
             .field("root", &self.root())
-            .field("leaves.len()", &self.leaves().count())
+            .field("leaves.len()", &self.len())
             .field("hashes.len()", &self.hashes().count())
             .finish()
     }
