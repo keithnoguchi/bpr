@@ -235,12 +235,7 @@ impl MerkleTreeBuilder {
     }
 
     pub fn build(mut self, depth: usize) -> MerkleTree {
-        let tree_size = if depth == 0 { 0 } else { (1 << depth) - 1 };
-        let mut tree = MerkleTree {
-            depth,
-            hasher: Sha3_256::new(),
-            hashes: vec![None; tree_size],
-        };
+        let mut tree = MerkleTree::with_depth(depth);
 
         // setup the initial hash.
         let initial_leaf = match self.initial_leaf.take() {
@@ -248,7 +243,7 @@ impl MerkleTreeBuilder {
             Some(initial_leaf) => initial_leaf,
         };
         tree.leaves_mut()
-            .for_each(|node| *node = Some(initial_leaf));
+            .for_each(|leaf| *leaf = Some(initial_leaf));
 
         // calculate parent hashes all the way to the root.
         let mut child_hash = initial_leaf;
