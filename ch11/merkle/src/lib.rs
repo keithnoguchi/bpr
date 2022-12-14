@@ -4,6 +4,7 @@ use generic_array::GenericArray;
 use sha3::{Digest, Sha3_256};
 use std::error::Error;
 use std::fmt::{self, Debug};
+use std::mem;
 use std::ops::Range;
 use std::result;
 use tracing::{instrument, trace, warn};
@@ -25,6 +26,26 @@ impl Debug for Tree {
             .field("leaves.len()", &self.leaves().count())
             .field("hashes.len()", &self.hashes().count())
             .finish()
+    }
+}
+
+struct ParentIterMut<'a> {
+    hashes: &'a mut [Option<Hash256>],
+}
+
+impl<'a> Iterator for ParentIterMut<'a> {
+    type Item = &'a mut Option<Hash256>;
+
+    // as in [rustomicon]
+    //
+    // [rustomicon]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
+    fn next(&mut self) -> Option<Self::Item> {
+        mem::take(&mut self.hashes)
+            .split_last_mut()
+            .map(|(parent, hashes)| {
+                self.hashes = hashes;
+                parent
+            })
     }
 }
 
