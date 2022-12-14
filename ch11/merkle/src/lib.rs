@@ -6,7 +6,7 @@ use std::error::Error;
 use std::fmt::{self, Debug};
 use std::ops::Range;
 use std::result;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub type Hash256 = GenericArray<u8, U32>;
@@ -45,6 +45,14 @@ impl Tree {
 
     fn hashes(&self) -> impl Iterator<Item = &Option<Hash256>> {
         self.hashes[..].iter()
+    }
+
+    fn try_hashes_in_depth_mut(
+        &mut self,
+        depth: usize,
+    ) -> Result<impl Iterator<Item = &mut Option<Hash256>>> {
+        let range = self.depth_range(depth).ok_or("invalid depth")?;
+        Ok(self.hashes[range.start..range.end].iter_mut())
     }
 
     #[instrument(name = "Tree::set", skip(self), err)]
@@ -115,12 +123,15 @@ impl Tree {
 
     #[inline]
     fn leaf_range(&self) -> Range<usize> {
-        self.index_range(self.depth).unwrap()
+        self.depth_range(self.depth).unwrap()
     }
 
-    fn index_range(&self, depth: usize) -> Option<Range<usize>> {
+    fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
         match depth {
-            depth if depth > self.depth => None,
+            depth if depth > self.depth => {
+                warn!(tree.depth = %self.depth, "invalid depth");
+                None
+            }
             0 => Some(Range {
                 start: 0,
                 end: self.hashes.len(),
@@ -189,19 +200,19 @@ impl TreeBuilder {
             Some(initial_leaf) => initial_leaf,
         };
         tree.leaves_mut()
-            .for_each(|hash| *hash = Some(initial_leaf));
+            .for_each(|node| *node = Some(initial_leaf));
 
         // calculate parent hashes all the way to the root.
-        let mut index = tree.leaf_range().start;
-        while let Some(parent) = parent(index) {
-            let child = tree.hashes[index].unwrap();
-            tree.hasher.update(child);
-            tree.hasher.update(child);
-            let parent_hash = tree.hasher.finalize_reset();
-            tree.hashes[parent..index]
-                .iter_mut()
-                .for_each(|hash| *hash = Some(parent_hash));
-            index = parent;
+        let mut child_hash = initial_leaf;
+        for depth in (1..depth).rev() {
+            tree.hasher.update(child_hash);
+            tree.hasher.update(child_hash);
+            let hash = tree.hasher.finalize_reset();
+            // it's safe to unwrap as depth is in the range.
+            tree.try_hashes_in_depth_mut(depth)
+                .unwrap()
+                .for_each(|node| *node = Some(hash));
+            child_hash = hash;
         }
         tree
     }
@@ -329,12 +340,57 @@ mod tests {
     }
 
     #[test]
-    fn tree_hashes_len() {
+    fn tree_hashes_count() {
         assert_eq!(TestTreeBuilder::build(1).hashes().count(), 1);
         assert_eq!(TestTreeBuilder::build(2).hashes().count(), 3);
         assert_eq!(TestTreeBuilder::build(3).hashes().count(), 7);
         assert_eq!(TestTreeBuilder::build(4).hashes().count(), 15);
         assert_eq!(TestTreeBuilder::build(5).hashes().count(), 31);
+    }
+
+    #[test]
+    fn tree_try_hashes_in_depth_mut() {
+        assert_eq!(
+            TestTreeBuilder::build(1)
+                .try_hashes_in_depth_mut(0)
+                .unwrap()
+                .count(),
+            1,
+        );
+        assert_eq!(
+            TestTreeBuilder::build(1)
+                .try_hashes_in_depth_mut(1)
+                .unwrap()
+                .count(),
+            1,
+        );
+        assert!(TestTreeBuilder::build(1)
+            .try_hashes_in_depth_mut(2)
+            .is_err());
+        assert_eq!(
+            TestTreeBuilder::build(2)
+                .try_hashes_in_depth_mut(0)
+                .unwrap()
+                .count(),
+            3,
+        );
+        assert_eq!(
+            TestTreeBuilder::build(2)
+                .try_hashes_in_depth_mut(1)
+                .unwrap()
+                .count(),
+            1,
+        );
+        assert_eq!(
+            TestTreeBuilder::build(2)
+                .try_hashes_in_depth_mut(2)
+                .unwrap()
+                .count(),
+            2,
+        );
+        assert!(TestTreeBuilder::build(2)
+            .try_hashes_in_depth_mut(3)
+            .is_err());
     }
 
     #[test]
