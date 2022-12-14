@@ -50,6 +50,19 @@ impl<'a> Iterator for ParentIterMut<'a> {
 }
 
 impl Tree {
+    pub fn with_depth(depth: usize) -> Self {
+        let table_size = (1 << depth) - 1;
+        Self {
+            depth,
+            hasher: Sha3_256::new(),
+            hashes: vec![None; table_size],
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        self.hashes.len()
+    }
+
     pub fn root(&self) -> Option<Hash256> {
         self.hashes[0]
     }
@@ -428,6 +441,16 @@ mod tests {
             TestTreeBuilder::build(5).leaf_range(),
             Range { start: 15, end: 31 },
         );
+    }
+
+    #[test]
+    fn test_with_depth() {
+        assert_eq!(Tree::with_depth(0).size(), 0);
+        assert_eq!(Tree::with_depth(1).size(), 1);
+        assert_eq!(Tree::with_depth(2).size(), 3);
+        assert_eq!(Tree::with_depth(3).size(), 7);
+        assert_eq!(Tree::with_depth(4).size(), 15);
+        assert_eq!(Tree::with_depth(5).size(), 31);
     }
 
     #[test]
