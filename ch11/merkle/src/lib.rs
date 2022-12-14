@@ -3,6 +3,7 @@ use generic_array::typenum::U32;
 use generic_array::GenericArray;
 use sha3::{Digest, Sha3_256};
 use std::error::Error;
+use std::fmt::{self, Debug};
 use std::ops::Range;
 use std::result;
 use tracing::{instrument, trace};
@@ -16,9 +17,34 @@ pub struct Tree {
     hashes: Vec<Option<Hash256>>,
 }
 
+impl Debug for Tree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Tree")
+            .field("depth", &self.depth)
+            .field("root", &self.root())
+            .field("leaves.len()", &self.leaves().count())
+            .field("hashes.len()", &self.hashes().count())
+            .finish()
+    }
+}
+
 impl Tree {
     pub fn root(&self) -> Option<Hash256> {
         self.hashes[0]
+    }
+
+    pub fn leaves(&self) -> impl Iterator<Item = &Option<Hash256>> {
+        let range = self.leaf_range();
+        self.hashes[range.start..range.end].iter()
+    }
+
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Hash256>> {
+        let range = self.leaf_range();
+        self.hashes[range.start..range.end].iter_mut()
+    }
+
+    fn hashes(&self) -> impl Iterator<Item = &Option<Hash256>> {
+        self.hashes[..].iter()
     }
 
     #[instrument(name = "Tree::set", skip(self), err)]
@@ -82,20 +108,6 @@ impl Tree {
             Err("invalid leaf offset")?;
         }
         Ok(leaf_index)
-    }
-
-    pub fn hashes(&self) -> &[Option<Hash256>] {
-        &self.hashes[..]
-    }
-
-    pub fn leaves(&self) -> impl Iterator<Item = &Option<Hash256>> {
-        let range = self.leaf_range();
-        self.hashes[range.start..range.end].iter()
-    }
-
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Hash256>> {
-        let range = self.leaf_range();
-        self.hashes[range.start..range.end].iter_mut()
     }
 
     #[inline]
@@ -306,20 +318,20 @@ mod tests {
     }
 
     #[test]
-    fn tree_hashes_len() {
-        assert_eq!(TestTreeBuilder::build(1).hashes().len(), 1);
-        assert_eq!(TestTreeBuilder::build(2).hashes().len(), 3);
-        assert_eq!(TestTreeBuilder::build(3).hashes().len(), 7);
-        assert_eq!(TestTreeBuilder::build(4).hashes().len(), 15);
-        assert_eq!(TestTreeBuilder::build(5).hashes().len(), 31);
-    }
-
-    #[test]
     fn tree_leaves_count() {
         assert_eq!(TestTreeBuilder::build(1).leaves().count(), 1);
         assert_eq!(TestTreeBuilder::build(2).leaves().count(), 2);
         assert_eq!(TestTreeBuilder::build(3).leaves().count(), 4);
         assert_eq!(TestTreeBuilder::build(4).leaves().count(), 8);
+    }
+
+    #[test]
+    fn tree_hashes_len() {
+        assert_eq!(TestTreeBuilder::build(1).hashes().count(), 1);
+        assert_eq!(TestTreeBuilder::build(2).hashes().count(), 3);
+        assert_eq!(TestTreeBuilder::build(3).hashes().count(), 7);
+        assert_eq!(TestTreeBuilder::build(4).hashes().count(), 15);
+        assert_eq!(TestTreeBuilder::build(5).hashes().count(), 31);
     }
 
     #[test]

@@ -21,9 +21,10 @@ fn main() {
     let tree = merkle::TreeBuilder::new()
         .initial_leaf(NR_LEAF.into())
         .build(depth);
+    println!("{tree:?}");
 
     for (i, leave) in tree.leaves().take(4).enumerate() {
-        println!("leave[{i}]={:x?}", leave);
+        println!("leaf[{i}]={:x?}", leave);
     }
     if tree.leaves().count() > 4 {
         println!("truncated {} leaves...", tree.leaves().count() - 4);
@@ -51,7 +52,7 @@ fn set_leaves(mut tree: merkle::Tree) {
     // print out the leaves.
     for (i, leaf) in tree.leaves().enumerate() {
         match leaf {
-            None => warn!("missing leave[offset={i}]"),
+            None => warn!("missing leaf[offset={i}]"),
             Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),
         }
     }
