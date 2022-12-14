@@ -11,6 +11,7 @@ type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub type Hash256 = GenericArray<u8, U32>;
 
 pub struct Tree {
+    depth: usize,
     hasher: Sha3_256,
     hashes: Vec<Option<Hash256>>,
 }
@@ -99,12 +100,12 @@ impl Tree {
 
     #[inline]
     fn leaf_range(&self) -> Range<usize> {
-        self.index_range(self.depth()).unwrap()
+        self.index_range(self.depth).unwrap()
     }
 
     fn index_range(&self, depth: usize) -> Option<Range<usize>> {
         match depth {
-            depth if depth > self.depth() => None,
+            depth if depth > self.depth => None,
             0 => Some(Range {
                 start: 0,
                 end: self.hashes.len(),
@@ -115,10 +116,6 @@ impl Tree {
                 Some(Range { start, end })
             }
         }
-    }
-
-    fn depth(&self) -> usize {
-        self.hashes.len().trailing_ones() as usize
     }
 
     fn hash(&self, index: usize) -> Result<&Hash256> {
@@ -166,6 +163,7 @@ impl TreeBuilder {
     pub fn build(mut self, depth: usize) -> Tree {
         let tree_size = if depth == 0 { 0 } else { (1 << depth) - 1 };
         let mut tree = Tree {
+            depth,
             hasher: Sha3_256::new(),
             hashes: vec![None; tree_size],
         };
@@ -338,15 +336,6 @@ mod tests {
             TestTreeBuilder::build(5).leaf_range(),
             Range { start: 15, end: 31 },
         );
-    }
-
-    #[test]
-    fn tree_depth() {
-        assert_eq!(TestTreeBuilder::build(1).depth(), 1);
-        assert_eq!(TestTreeBuilder::build(2).depth(), 2);
-        assert_eq!(TestTreeBuilder::build(3).depth(), 3);
-        assert_eq!(TestTreeBuilder::build(4).depth(), 4);
-        assert_eq!(TestTreeBuilder::build(5).depth(), 5);
     }
 
     #[test]
