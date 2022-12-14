@@ -5,7 +5,7 @@ use sha3::{Digest, Sha3_256};
 use std::error::Error;
 use std::fmt::{self, Debug};
 use std::mem;
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::result;
 use tracing::{instrument, trace, warn};
 
@@ -16,6 +16,20 @@ pub struct Tree {
     depth: usize,
     hasher: Sha3_256,
     hashes: Vec<Option<Hash256>>,
+}
+
+/// Deref gives the slice of leave hashes.
+impl Deref for Tree {
+    type Target = [Option<Hash256>];
+
+    fn deref(&self) -> &Self::Target {
+        if self.depth == 0 {
+            &[]
+        } else {
+            let start = (1 << (self.depth - 1)) - 1;
+            &self.hashes[start..]
+        }
+    }
 }
 
 impl Debug for Tree {
@@ -444,7 +458,15 @@ mod tests {
     }
 
     #[test]
-    fn test_with_depth() {
+    fn tree_len() {
+        assert_eq!(Tree::with_depth(0).len(), 0);
+        for depth in 1..=20 {
+            assert_eq!(Tree::with_depth(depth).len(), 1 << (depth - 1));
+        }
+    }
+
+    #[test]
+    fn tree_size() {
         assert_eq!(Tree::with_depth(0).size(), 0);
         assert_eq!(Tree::with_depth(1).size(), 1);
         assert_eq!(Tree::with_depth(2).size(), 3);
