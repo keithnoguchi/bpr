@@ -18,31 +18,6 @@ pub struct MerkleTree {
     hashes: Vec<Option<Hash256>>,
 }
 
-/// Deref gives the slice of leave hashes.
-impl Deref for MerkleTree {
-    type Target = [Option<Hash256>];
-
-    fn deref(&self) -> &Self::Target {
-        if self.depth == 0 {
-            &[]
-        } else {
-            let start = (1 << (self.depth - 1)) - 1;
-            &self.hashes[start..]
-        }
-    }
-}
-
-impl Debug for MerkleTree {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MerkleTree")
-            .field("depth", &self.depth)
-            .field("root", &self.root())
-            .field("leaves.len()", &self.len())
-            .field("hashes.len()", &self.hashes().count())
-            .finish()
-    }
-}
-
 struct ParentIterMut<'a> {
     hashes: &'a mut [Option<Hash256>],
 }
@@ -60,6 +35,25 @@ impl<'a> Iterator for ParentIterMut<'a> {
                 self.hashes = hashes;
                 parent
             })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Position {
+    Root,
+    Left,
+    Right,
+}
+
+impl From<usize> for Position {
+    fn from(index: usize) -> Self {
+        if index == 0 {
+            Self::Root
+        } else if index & 0x1 == 0x1 {
+            Self::Left
+        } else {
+            Self::Right
+        }
     }
 }
 
@@ -218,22 +212,28 @@ impl MerkleTree {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Position {
-    Root,
-    Left,
-    Right,
+/// Deref gives the slice of leave hashes.
+impl Deref for MerkleTree {
+    type Target = [Option<Hash256>];
+
+    fn deref(&self) -> &Self::Target {
+        if self.depth == 0 {
+            &[]
+        } else {
+            let start = (1 << (self.depth - 1)) - 1;
+            &self.hashes[start..]
+        }
+    }
 }
 
-impl From<usize> for Position {
-    fn from(index: usize) -> Self {
-        if index == 0 {
-            Self::Root
-        } else if index & 0x1 == 0x1 {
-            Self::Left
-        } else {
-            Self::Right
-        }
+impl Debug for MerkleTree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MerkleTree")
+            .field("depth", &self.depth)
+            .field("root", &self.root())
+            .field("leaves.len()", &self.len())
+            .field("hashes.len()", &self.hashes().count())
+            .finish()
     }
 }
 
