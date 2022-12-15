@@ -58,12 +58,45 @@ impl From<usize> for Position {
 }
 
 impl MerkleTree {
-    pub fn with_depth(depth: usize) -> Self {
+    /// I'm not convinced with the name of this function, because
+    /// giving two parameters a bit confusing.  But also, the previous
+    /// builder pattern is too much.
+    ///
+    /// Let me think about it and come back with the better approach
+    /// in the future iteration.
+    pub fn with_depth_and_leaf(depth: usize, leaf: Hash256) -> Self {
+        let mut table = Self::with_depth(depth);
+        table.leaves_mut().for_each(|node| *node = Some(leaf));
+
+        // calculate the merkle root.
+        let mut child_hash = leaf;
+        for depth in (1..depth).rev() {
+            table.hasher.update(child_hash);
+            table.hasher.update(child_hash);
+            let parent_hash = table.hasher.finalize_reset();
+            table
+                .try_hashes_in_depth_mut(depth)
+                .unwrap()
+                .for_each(|node| *node = Some(parent_hash));
+            child_hash = parent_hash;
+        }
+        table
+    }
+
+    // Make this associated function private, as it doesn't completely
+    // initialize the table.  For example, the following code will panic:
+    //
+    // ```
+    // let mut table = MerkleTree::with_depth(20);
+    //
+    // table.set(0, [11u8; 32].into());
+    // ```
+    fn with_depth(depth: usize) -> Self {
         let table_size = (1 << depth) - 1;
         Self {
             depth,
-            hasher: Sha3_256::new(),
             hashes: vec![None; table_size],
+            ..Self::default()
         }
     }
 
@@ -160,24 +193,6 @@ impl MerkleTree {
         self.depth_range(self.depth).unwrap()
     }
 
-    fn set_initial_leaf(&mut self, initial_leaf: &Hash256) {
-        self.leaves_mut()
-            .for_each(|leaf| *leaf = Some(*initial_leaf));
-
-        // update all the way to the root.
-        let mut child_hash = *initial_leaf;
-        for depth in (1..self.depth).rev() {
-            self.hasher.update(child_hash);
-            self.hasher.update(child_hash);
-            let hash = self.hasher.finalize_reset();
-            // it's safe to unwrap here as depth is in the valid range.
-            self.try_hashes_in_depth_mut(depth)
-                .unwrap()
-                .for_each(|node| *node = Some(hash));
-            child_hash = hash;
-        }
-    }
-
     fn try_hashes_in_depth_mut(
         &mut self,
         depth: usize,
@@ -212,6 +227,16 @@ impl MerkleTree {
     }
 }
 
+impl Default for MerkleTree {
+    fn default() -> Self {
+        Self {
+            depth: 0,
+            hasher: Sha3_256::new(),
+            hashes: Default::default(),
+        }
+    }
+}
+
 /// Deref gives the slice of leave hashes.
 impl Deref for MerkleTree {
     type Target = [Option<Hash256>];
@@ -234,34 +259,6 @@ impl Debug for MerkleTree {
             .field("leaves.len()", &self.len())
             .field("hashes.len()", &self.hashes().count())
             .finish()
-    }
-}
-
-#[derive(Default)]
-pub struct MerkleTreeBuilder {
-    initial_leaf: Option<Hash256>,
-}
-
-impl MerkleTreeBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn initial_leaf(mut self, hash: Hash256) -> Self {
-        self.initial_leaf = Some(hash);
-        self
-    }
-
-    pub fn build(mut self, depth: usize) -> MerkleTree {
-        // setup the initial hash.
-        let mut tree = MerkleTree::with_depth(depth);
-        match self.initial_leaf.take() {
-            None => tree,
-            Some(initial_leaf) => {
-                tree.set_initial_leaf(&initial_leaf);
-                tree
-            }
-        }
     }
 }
 
@@ -328,14 +325,14 @@ pub fn base(index: usize) -> usize {
 mod tests {
     use super::{ancesters, parent, sibling, siblings};
     use super::{base, depth_and_offset, index};
-    use super::{MerkleTree, MerkleTreeBuilder, Position};
+    use super::{MerkleTree, Position};
+    use generic_array::GenericArray;
     use hex_literal::hex;
     use std::ops::Range;
 
     #[test]
     fn tree_proof() {
-        let tree = TestTreeBuilder::build(5);
-
+        let tree = TreeBuilder::build(5);
         let got = tree.proof(3).unwrap();
         assert_eq!(got.len(), 4);
         assert_eq!(got[0].0, Position::Right);
@@ -359,8 +356,8 @@ mod tests {
 
     #[test]
     fn tree_set() {
-        let tree = TestTreeBuilder::build(5);
-        assert_eq!(tree.root().unwrap(), TestTreeBuilder::SAMPLE_ROOT.into());
+        let tree = TreeBuilder::build(5);
+        assert_eq!(tree.root().unwrap(), TreeBuilder::SAMPLE_ROOT.into());
     }
 
     #[test]
@@ -370,111 +367,103 @@ mod tests {
         const SAMPLE_ROOT: [u8; 32] =
             hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
 
-        let tree = MerkleTreeBuilder::new()
-            .initial_leaf(SAMPLE_LEAF.into())
-            .build(1);
+        let tree = MerkleTree::with_depth_and_leaf(1, SAMPLE_LEAF.into());
         assert_eq!(tree.root(), Some(SAMPLE_LEAF.into()));
-        let tree = MerkleTreeBuilder::new()
-            .initial_leaf(SAMPLE_LEAF.into())
-            .build(20);
+        let tree = MerkleTree::with_depth_and_leaf(20, SAMPLE_LEAF.into());
         assert_eq!(tree.root(), Some(SAMPLE_ROOT.into()));
     }
 
     #[test]
     fn tree_leaves_count() {
-        assert_eq!(TestTreeBuilder::build(1).leaves().count(), 1);
-        assert_eq!(TestTreeBuilder::build(2).leaves().count(), 2);
-        assert_eq!(TestTreeBuilder::build(3).leaves().count(), 4);
-        assert_eq!(TestTreeBuilder::build(4).leaves().count(), 8);
+        assert_eq!(TreeBuilder::build(1).leaves().count(), 1);
+        assert_eq!(TreeBuilder::build(2).leaves().count(), 2);
+        assert_eq!(TreeBuilder::build(3).leaves().count(), 4);
+        assert_eq!(TreeBuilder::build(4).leaves().count(), 8);
     }
 
     #[test]
     fn tree_hashes_count() {
-        assert_eq!(TestTreeBuilder::build(1).hashes().count(), 1);
-        assert_eq!(TestTreeBuilder::build(2).hashes().count(), 3);
-        assert_eq!(TestTreeBuilder::build(3).hashes().count(), 7);
-        assert_eq!(TestTreeBuilder::build(4).hashes().count(), 15);
-        assert_eq!(TestTreeBuilder::build(5).hashes().count(), 31);
+        assert_eq!(TreeBuilder::build(1).hashes().count(), 1);
+        assert_eq!(TreeBuilder::build(2).hashes().count(), 3);
+        assert_eq!(TreeBuilder::build(3).hashes().count(), 7);
+        assert_eq!(TreeBuilder::build(4).hashes().count(), 15);
+        assert_eq!(TreeBuilder::build(5).hashes().count(), 31);
     }
 
     #[test]
     fn tree_try_hashes_in_depth_mut() {
         assert_eq!(
-            TestTreeBuilder::build(1)
+            TreeBuilder::build(1)
                 .try_hashes_in_depth_mut(0)
                 .unwrap()
                 .count(),
             1,
         );
         assert_eq!(
-            TestTreeBuilder::build(1)
+            TreeBuilder::build(1)
                 .try_hashes_in_depth_mut(1)
                 .unwrap()
                 .count(),
             1,
         );
-        assert!(TestTreeBuilder::build(1)
-            .try_hashes_in_depth_mut(2)
-            .is_err());
+        assert!(TreeBuilder::build(1).try_hashes_in_depth_mut(2).is_err());
         assert_eq!(
-            TestTreeBuilder::build(2)
+            TreeBuilder::build(2)
                 .try_hashes_in_depth_mut(0)
                 .unwrap()
                 .count(),
             3,
         );
         assert_eq!(
-            TestTreeBuilder::build(2)
+            TreeBuilder::build(2)
                 .try_hashes_in_depth_mut(1)
                 .unwrap()
                 .count(),
             1,
         );
         assert_eq!(
-            TestTreeBuilder::build(2)
+            TreeBuilder::build(2)
                 .try_hashes_in_depth_mut(2)
                 .unwrap()
                 .count(),
             2,
         );
-        assert!(TestTreeBuilder::build(2)
-            .try_hashes_in_depth_mut(3)
-            .is_err());
+        assert!(TreeBuilder::build(2).try_hashes_in_depth_mut(3).is_err());
     }
 
     #[test]
     fn tree_leaf_range() {
         assert_eq!(
-            TestTreeBuilder::build(1).leaf_range(),
+            TreeBuilder::build(1).leaf_range(),
             Range { start: 0, end: 1 },
         );
         assert_eq!(
-            TestTreeBuilder::build(2).leaf_range(),
+            TreeBuilder::build(2).leaf_range(),
             Range { start: 1, end: 3 },
         );
         assert_eq!(
-            TestTreeBuilder::build(5).leaf_range(),
+            TreeBuilder::build(5).leaf_range(),
             Range { start: 15, end: 31 },
         );
     }
 
     #[test]
     fn tree_len() {
-        assert_eq!(MerkleTree::with_depth(0).len(), 0);
-        for depth in 1..=20 {
+        let leaf = GenericArray::<_, _>::from([0u8; 32]);
+        assert_eq!(MerkleTree::with_depth_and_leaf(0, leaf).len(), 0);
+        for depth in 1..=10 {
             let want = 1 << (depth - 1);
-            assert_eq!(MerkleTree::with_depth(depth).len(), want);
+            assert_eq!(MerkleTree::with_depth_and_leaf(depth, leaf).len(), want);
         }
     }
 
     #[test]
     fn tree_size() {
-        assert_eq!(MerkleTree::with_depth(0).size(), 0);
-        assert_eq!(MerkleTree::with_depth(1).size(), 1);
-        assert_eq!(MerkleTree::with_depth(2).size(), 3);
-        assert_eq!(MerkleTree::with_depth(3).size(), 7);
-        assert_eq!(MerkleTree::with_depth(4).size(), 15);
-        assert_eq!(MerkleTree::with_depth(5).size(), 31);
+        let leaf = GenericArray::<_, _>::from([0u8; 32]);
+        for depth in 0..=10 {
+            let want = (1 << depth) - 1;
+            assert_eq!(MerkleTree::with_depth_and_leaf(depth, leaf).size(), want);
+        }
     }
 
     #[test]
@@ -618,19 +607,18 @@ mod tests {
         assert_eq!(base(14), 7);
     }
 
-    struct TestTreeBuilder;
+    struct TreeBuilder;
 
-    impl TestTreeBuilder {
+    impl TreeBuilder {
         const SAMPLE_ROOT: [u8; 32] =
             hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
 
         fn build(depth: usize) -> MerkleTree {
-            let mut tree = MerkleTreeBuilder::new()
-                .initial_leaf([0u8; 32].into())
-                .build(depth);
+            let leaf = GenericArray::<_, _>::from([0u8; 32]);
+            let mut tree = MerkleTree::with_depth_and_leaf(depth, leaf);
             for i in 0..tree.len() {
-                let leaf = [0x11 * i as u8; 32];
-                tree.set(i, leaf.into()).unwrap();
+                let leaf = GenericArray::<_, _>::from([0x11 * i as u8; 32]);
+                tree.set(i, leaf).unwrap();
             }
             tree
         }

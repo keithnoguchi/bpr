@@ -1,27 +1,21 @@
 //! Merkle Tree
-use merkle::MerkleTreeBuilder;
-use std::path::PathBuf;
+use merkle::MerkleTree;
 use std::str::FromStr;
 use tracing::{info, instrument, warn};
 
 const NR_DEPTH: usize = 20;
-const NR_LEAF: [u8; 32] = [0xab; 32];
+const NR_ZERO_HASH: [u8; 32] = [0; 32];
+const NR_LEAF_HASH: [u8; 32] = [0xab; 32];
 
 fn main() {
     tracing_subscriber::fmt::init();
-    let mut args = std::env::args();
-    let progname = args.next().map(PathBuf::from).unwrap();
-    let depth = args
-        .next()
+    let depth = std::env::args()
+        .nth(1)
         .as_ref()
         .and_then(|v| usize::from_str(v).ok())
         .unwrap_or(NR_DEPTH);
 
-    println!("{:?}: depth={depth}", progname.file_name().unwrap());
-
-    let tree = MerkleTreeBuilder::new()
-        .initial_leaf(NR_LEAF.into())
-        .build(depth);
+    let tree = MerkleTree::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
     println!("{tree:?}");
 
     for (i, leave) in tree.leaves().take(4).enumerate() {
@@ -39,9 +33,7 @@ fn main() {
 
 #[instrument]
 fn set_leaves(depth: usize) {
-    let mut tree = MerkleTreeBuilder::new()
-        .initial_leaf([0u8; 32].into())
-        .build(depth);
+    let mut tree = MerkleTree::with_depth_and_leaf(depth, NR_ZERO_HASH.into());
 
     // set the leaves.
     for i in 0..tree.len() {
