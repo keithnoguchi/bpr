@@ -36,13 +36,13 @@ fn set_leaves(depth: usize) {
     let mut tree = MerkleTree::with_depth_and_leaf(depth, NR_ZERO_HASH.into());
 
     // set the leaves.
-    for i in 0..tree.len() {
+    for i in 0..tree.leaves().count() {
         let hash = [0x11u8 * i as u8; 32];
         tree.set(i, hash.into()).unwrap();
     }
 
     // print out the leaves.
-    for (i, leaf) in tree.iter().enumerate() {
+    for (i, leaf) in tree.leaves().enumerate() {
         match leaf {
             None => warn!("missing leaf[offset={i}]"),
             Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),

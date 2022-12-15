@@ -100,26 +100,26 @@ impl MerkleTree {
         }
     }
 
-    pub fn size(&self) -> usize {
-        self.hashes.len()
-    }
-
     pub fn root(&self) -> Option<Hash256> {
         self.hashes[0]
     }
 
-    #[inline]
     pub fn leaves(&self) -> impl Iterator<Item = &Option<Hash256>> {
-        self.iter()
+        if self.depth == 0 {
+            [].iter()
+        } else {
+            let start = (1 << (self.depth - 1)) - 1;
+            self.hashes[start..].iter()
+        }
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Hash256>> {
-        let range = self.leaf_range();
-        self.hashes[range.start..range.end].iter_mut()
-    }
-
-    fn hashes(&self) -> impl Iterator<Item = &Option<Hash256>> {
-        self.hashes[..].iter()
+        if self.depth == 0 {
+            [].iter_mut()
+        } else {
+            let start = (1 << (self.depth - 1)) - 1;
+            self.hashes[start..].iter_mut()
+        }
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
@@ -237,28 +237,22 @@ impl Default for MerkleTree {
     }
 }
 
-/// Deref gives the slice of leave hashes.
-impl Deref for MerkleTree {
-    type Target = [Option<Hash256>];
-
-    fn deref(&self) -> &Self::Target {
-        if self.depth == 0 {
-            &[]
-        } else {
-            let start = (1 << (self.depth - 1)) - 1;
-            &self.hashes[start..]
-        }
-    }
-}
-
 impl Debug for MerkleTree {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MerkleTree")
             .field("depth", &self.depth)
             .field("root", &self.root())
-            .field("leaves.len()", &self.len())
-            .field("hashes.len()", &self.hashes().count())
+            .field("len", &self.hashes.len())
+            .field("leaves_len", &self.leaves().count())
             .finish()
+    }
+}
+
+impl Deref for MerkleTree {
+    type Target = [Option<Hash256>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.hashes[..]
     }
 }
 
@@ -374,23 +368,6 @@ mod tests {
     }
 
     #[test]
-    fn tree_leaves_count() {
-        assert_eq!(TreeBuilder::build(1).leaves().count(), 1);
-        assert_eq!(TreeBuilder::build(2).leaves().count(), 2);
-        assert_eq!(TreeBuilder::build(3).leaves().count(), 4);
-        assert_eq!(TreeBuilder::build(4).leaves().count(), 8);
-    }
-
-    #[test]
-    fn tree_hashes_count() {
-        assert_eq!(TreeBuilder::build(1).hashes().count(), 1);
-        assert_eq!(TreeBuilder::build(2).hashes().count(), 3);
-        assert_eq!(TreeBuilder::build(3).hashes().count(), 7);
-        assert_eq!(TreeBuilder::build(4).hashes().count(), 15);
-        assert_eq!(TreeBuilder::build(5).hashes().count(), 31);
-    }
-
-    #[test]
     fn tree_try_hashes_in_depth_mut() {
         assert_eq!(
             TreeBuilder::build(1)
@@ -452,17 +429,23 @@ mod tests {
         let leaf = GenericArray::<_, _>::from([0u8; 32]);
         assert_eq!(MerkleTree::with_depth_and_leaf(0, leaf).len(), 0);
         for depth in 1..=10 {
-            let want = 1 << (depth - 1);
+            let want = (1 << depth) - 1;
             assert_eq!(MerkleTree::with_depth_and_leaf(depth, leaf).len(), want);
         }
     }
 
     #[test]
-    fn tree_size() {
+    fn tree_leaves_count() {
         let leaf = GenericArray::<_, _>::from([0u8; 32]);
-        for depth in 0..=10 {
-            let want = (1 << depth) - 1;
-            assert_eq!(MerkleTree::with_depth_and_leaf(depth, leaf).size(), want);
+        assert_eq!(MerkleTree::with_depth_and_leaf(0, leaf).leaves().count(), 0);
+        for depth in 1..=10 {
+            let want = 1 << depth - 1;
+            assert_eq!(
+                MerkleTree::with_depth_and_leaf(depth, leaf)
+                    .leaves()
+                    .count(),
+                want,
+            );
         }
     }
 
@@ -616,7 +599,7 @@ mod tests {
         fn build(depth: usize) -> MerkleTree {
             let leaf = GenericArray::<_, _>::from([0u8; 32]);
             let mut tree = MerkleTree::with_depth_and_leaf(depth, leaf);
-            for i in 0..tree.len() {
+            for i in 0..tree.leaves().count() {
                 let leaf = GenericArray::<_, _>::from([0x11 * i as u8; 32]);
                 tree.set(i, leaf).unwrap();
             }
