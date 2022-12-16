@@ -96,6 +96,7 @@ dependencies = [
 name = "merkle"
 version = "0.1.0"
 dependencies = [
+ "digest",
  "generic-array",
  "hex-literal",
  "sha3",

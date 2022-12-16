@@ -1,5 +1,6 @@
 //! Merkle Tree
 use merkle::MerkleTree;
+use sha3::Sha3_256;
 use std::str::FromStr;
 use tracing::{info, instrument, warn};
 
@@ -15,7 +16,7 @@ fn main() {
         .and_then(|v| usize::from_str(v).ok())
         .unwrap_or(NR_DEPTH);
 
-    let tree = MerkleTree::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
+    let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
     println!("{tree:?}");
 
     for (i, leave) in tree.leaves().take(4).enumerate() {
@@ -33,7 +34,7 @@ fn main() {
 
 #[instrument]
 fn set_leaves(depth: usize) {
-    let mut tree = MerkleTree::with_depth_and_leaf(depth, NR_ZERO_HASH.into());
+    let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_ZERO_HASH.into());
 
     // set the leaves.
     for i in 0..tree.leaves().count() {
