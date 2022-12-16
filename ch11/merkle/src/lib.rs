@@ -84,8 +84,8 @@ where
         let mut child_hash = leaf;
         for depth in (1..depth).rev() {
             let parent_hash = H::new()
-                .chain_update(&child_hash)
-                .chain_update(&child_hash)
+                .chain_update(child_hash)
+                .chain_update(child_hash)
                 .finalize();
             table
                 .try_hashes_in_depth_mut(depth)
