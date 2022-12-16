@@ -15,7 +15,8 @@ where
     H: Digest + OutputSizeUser,
     <<H as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    depth: usize,
+    tree_depth: usize,
+    leaf_start_index: usize,
     hashes: Vec<Option<Output<H>>>,
 }
 
@@ -103,11 +104,17 @@ where
     //
     // table.set(0, [11u8; 32].into());
     // ```
-    fn with_depth(depth: usize) -> Self {
-        let table_size = (1 << depth) - 1;
+    fn with_depth(tree_depth: usize) -> Self {
+        let tree_size = (1 << tree_depth) - 1;
+        let leaf_start_index = if tree_depth == 0 {
+            0
+        } else {
+            (1 << (tree_depth - 1)) - 1
+        };
         Self {
-            depth,
-            hashes: vec![None; table_size],
+            hashes: vec![None; tree_size],
+            tree_depth,
+            leaf_start_index,
         }
     }
 
@@ -116,21 +123,11 @@ where
     }
 
     pub fn leaves(&self) -> impl Iterator<Item = &Option<Output<H>>> {
-        if self.depth == 0 {
-            [].iter()
-        } else {
-            let start = (1 << (self.depth - 1)) - 1;
-            self.hashes[start..].iter()
-        }
+        self.hashes[self.leaf_start_index..].iter()
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Output<H>>> {
-        if self.depth == 0 {
-            [].iter_mut()
-        } else {
-            let start = (1 << (self.depth - 1)) - 1;
-            self.hashes[start..].iter_mut()
-        }
+        self.hashes[self.leaf_start_index..].iter_mut()
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
@@ -201,7 +198,7 @@ where
 
     #[inline]
     fn leaf_range(&self) -> Range<usize> {
-        self.depth_range(self.depth).unwrap()
+        self.depth_range(self.tree_depth).unwrap()
     }
 
     fn try_hashes_in_depth_mut(
@@ -214,8 +211,8 @@ where
 
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
         match depth {
-            depth if depth > self.depth => {
-                warn!(tree.depth = %self.depth, "invalid depth");
+            depth if depth > self.tree_depth => {
+                warn!(tree.depth = %self.tree_depth, "invalid depth");
                 None
             }
             0 => Some(Range {
@@ -245,7 +242,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MerkleTree")
-            .field("depth", &self.depth)
+            .field("tree_depth", &self.tree_depth)
+            .field("leaf_start_index", &self.leaf_start_index)
             .field("root", &self.root())
             .field("len", &self.hashes.len())
             .field("leaves_len", &self.leaves().count())
