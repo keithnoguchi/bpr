@@ -10,28 +10,28 @@ use tracing::{instrument, trace, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
-pub struct MerkleTree<H>
+pub struct MerkleTree<B>
 where
-    H: Digest + OutputSizeUser,
-    <<H as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    B: Digest + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     tree_depth: usize,
     leaf_start_index: usize,
-    hashes: Vec<Option<Output<H>>>,
+    hashes: Vec<Option<Output<B>>>,
 }
 
-struct ParentIterMut<'a, H>
+struct ParentIterMut<'a, B>
 where
-    H: OutputSizeUser,
+    B: OutputSizeUser,
 {
-    hashes: &'a mut [Option<Output<H>>],
+    hashes: &'a mut [Option<Output<B>>],
 }
 
-impl<'a, H> Iterator for ParentIterMut<'a, H>
+impl<'a, B> Iterator for ParentIterMut<'a, B>
 where
-    H: OutputSizeUser,
+    B: OutputSizeUser,
 {
-    type Item = &'a mut Option<Output<H>>;
+    type Item = &'a mut Option<Output<B>>;
 
     // as in [rustomicon]
     //
@@ -65,10 +65,10 @@ impl From<usize> for Position {
     }
 }
 
-impl<H> MerkleTree<H>
+impl<B> MerkleTree<B>
 where
-    H: Digest + OutputSizeUser,
-    <<H as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    B: Digest + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     /// I'm not convinced with the name of this function, because
     /// giving two parameters a bit confusing.  But also, the previous
@@ -76,14 +76,14 @@ where
     ///
     /// Let me think about it and come back with the better approach
     /// in the future iteration.
-    pub fn with_depth_and_leaf(depth: usize, leaf: Output<H>) -> Self {
+    pub fn with_depth_and_leaf(depth: usize, leaf: Output<B>) -> Self {
         let mut table = Self::with_depth(depth);
         table.leaves_mut().for_each(|node| *node = Some(leaf));
 
         // calculate the merkle root.
         let mut child_hash = leaf;
         for depth in (1..depth).rev() {
-            let parent_hash = H::new()
+            let parent_hash = B::new()
                 .chain_update(child_hash)
                 .chain_update(child_hash)
                 .finalize();
@@ -118,20 +118,20 @@ where
         }
     }
 
-    pub fn root(&self) -> Option<Output<H>> {
+    pub fn root(&self) -> Option<Output<B>> {
         self.hashes[0]
     }
 
-    pub fn leaves(&self) -> impl Iterator<Item = &Option<Output<H>>> {
+    pub fn leaves(&self) -> impl Iterator<Item = &Option<Output<B>>> {
         self.hashes[self.leaf_start_index..].iter()
     }
 
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Output<H>>> {
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Output<B>>> {
         self.hashes[self.leaf_start_index..].iter_mut()
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
-    pub fn set(&mut self, leaf_offset: usize, hash: Output<H>) -> Result<()> {
+    pub fn set(&mut self, leaf_offset: usize, hash: Output<B>) -> Result<()> {
         let leaf = match self.leaves_mut().nth(leaf_offset) {
             None => Err("invalid leaf offset")?,
             Some(leaf) => leaf,
@@ -145,7 +145,7 @@ where
         // calculate the merkle root.
         let mut index = self.leaf_range().start + leaf_offset;
         while let Some((left, right)) = siblings(index) {
-            let hash = H::new()
+            let hash = B::new()
                 .chain_update(self.hash(left)?)
                 .chain_update(self.hash(right)?)
                 .finalize();
@@ -163,7 +163,7 @@ where
         Ok(())
     }
 
-    pub fn proof(&self, leaf_offset: usize) -> Result<Vec<(Position, Output<H>)>> {
+    pub fn proof(&self, leaf_offset: usize) -> Result<Vec<(Position, Output<B>)>> {
         let leaf_index = self.leaf_index(leaf_offset)?;
         let mut proof = vec![];
         match self.proof_pair(leaf_index) {
@@ -181,7 +181,7 @@ where
         Ok(proof)
     }
 
-    fn proof_pair(&self, index: usize) -> Option<(Position, Output<H>)> {
+    fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
         sibling(index)
             .and_then(|sibling| self.hashes[sibling])
             .map(|hash| (Position::from(index), hash))
@@ -204,7 +204,7 @@ where
     fn try_hashes_in_depth_mut(
         &mut self,
         depth: usize,
-    ) -> Result<impl Iterator<Item = &mut Option<Output<H>>>> {
+    ) -> Result<impl Iterator<Item = &mut Option<Output<B>>>> {
         let range = self.depth_range(depth).ok_or("invalid depth")?;
         Ok(self.hashes[range.start..range.end].iter_mut())
     }
@@ -227,7 +227,7 @@ where
         }
     }
 
-    fn hash(&self, index: usize) -> Result<&Output<H>> {
+    fn hash(&self, index: usize) -> Result<&Output<B>> {
         self.hashes
             .get(index)
             .and_then(|hash| hash.as_ref())
@@ -235,10 +235,10 @@ where
     }
 }
 
-impl<H> Debug for MerkleTree<H>
+impl<B> Debug for MerkleTree<B>
 where
-    H: Digest + OutputSizeUser,
-    <<H as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    B: Digest + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MerkleTree")
@@ -251,12 +251,12 @@ where
     }
 }
 
-impl<H> Deref for MerkleTree<H>
+impl<B> Deref for MerkleTree<B>
 where
-    H: Digest + OutputSizeUser,
-    <<H as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    B: Digest + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    type Target = [Option<Output<H>>];
+    type Target = [Option<Output<B>>];
 
     fn deref(&self) -> &Self::Target {
         &self.hashes[..]
