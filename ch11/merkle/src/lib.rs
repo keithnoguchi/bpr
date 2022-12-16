@@ -1,6 +1,6 @@
 //! MarkelTree
-use generic_array::ArrayLength;
 use digest::{Digest, Output, OutputSizeUser};
+use generic_array::ArrayLength;
 use std::error::Error;
 use std::fmt::{self, Debug};
 use std::mem;
@@ -82,10 +82,10 @@ where
         // calculate the merkle root.
         let mut child_hash = leaf;
         for depth in (1..depth).rev() {
-            let mut hasher = H::new();
-            hasher.update(child_hash);
-            hasher.update(child_hash);
-            let parent_hash = hasher.finalize();
+            let parent_hash = H::new()
+                .chain_update(&child_hash)
+                .chain_update(&child_hash)
+                .finalize();
             table
                 .try_hashes_in_depth_mut(depth)
                 .unwrap()
@@ -148,10 +148,10 @@ where
         // calculate the merkle root.
         let mut index = self.leaf_range().start + leaf_offset;
         while let Some((left, right)) = siblings(index) {
-            let mut hasher = H::new();
-            hasher.update(self.hash(left)?);
-            hasher.update(self.hash(right)?);
-            let hash = hasher.finalize();
+            let hash = H::new()
+                .chain_update(self.hash(left)?)
+                .chain_update(self.hash(right)?)
+                .finalize();
             let parent = parent(left).unwrap();
             trace!(
                 left_child = %left,
