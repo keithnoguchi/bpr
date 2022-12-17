@@ -2,7 +2,7 @@
 use digest::{Digest, Output, OutputSizeUser};
 use generic_array::ArrayLength;
 use std::error::Error;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 use std::mem;
 use std::ops::{Deref, Range};
 use std::result;
@@ -10,64 +10,21 @@ use tracing::{instrument, trace, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
+/// MerkleTree.
+#[derive(Debug)]
 pub struct MerkleTree<B>
 where
-    B: Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    B: Debug + Digest + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy + Clone,
 {
+    data: Vec<TreeNode<B>>,
     tree_depth: usize,
-    leaf_start_index: usize,
-    hashes: Vec<Option<Output<B>>>,
-}
-
-struct ParentIterMut<'a, B>
-where
-    B: OutputSizeUser,
-{
-    hashes: &'a mut [Option<Output<B>>],
-}
-
-impl<'a, B> Iterator for ParentIterMut<'a, B>
-where
-    B: OutputSizeUser,
-{
-    type Item = &'a mut Option<Output<B>>;
-
-    // as in [rustomicon]
-    //
-    // [rustomicon]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
-    fn next(&mut self) -> Option<Self::Item> {
-        mem::take(&mut self.hashes)
-            .split_last_mut()
-            .map(|(parent, hashes)| {
-                self.hashes = hashes;
-                parent
-            })
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Position {
-    Root,
-    Left,
-    Right,
-}
-
-impl From<usize> for Position {
-    fn from(index: usize) -> Self {
-        if index == 0 {
-            Self::Root
-        } else if index & 0x1 == 0x1 {
-            Self::Left
-        } else {
-            Self::Right
-        }
-    }
+    leaf_start: usize,
 }
 
 impl<B> MerkleTree<B>
 where
-    B: Digest + OutputSizeUser,
+    B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     /// I'm not convinced with the name of this function, because
@@ -77,23 +34,20 @@ where
     /// Let me think about it and come back with the better approach
     /// in the future iteration.
     pub fn with_depth_and_leaf(depth: usize, leaf: Output<B>) -> Self {
-        let mut table = Self::with_depth(depth);
-        table.leaves_mut().for_each(|node| *node = Some(leaf));
+        let mut tree = Self::with_depth(depth);
+        let mut leaf = TreeNode::from(leaf);
+        tree.leaves_mut().for_each(|node| *node = leaf.clone());
 
         // calculate the merkle root.
-        let mut child_hash = leaf;
         for depth in (1..depth).rev() {
-            let parent_hash = B::new()
-                .chain_update(child_hash)
-                .chain_update(child_hash)
-                .finalize();
-            table
-                .try_hashes_in_depth_mut(depth)
+            let parent =
+                TreeNode::from(B::new().chain_update(&leaf).chain_update(&leaf).finalize());
+            tree.try_hashes_in_depth_mut(depth)
                 .unwrap()
-                .for_each(|node| *node = Some(parent_hash));
-            child_hash = parent_hash;
+                .for_each(|node| *node = parent.clone());
+            leaf = parent;
         }
-        table
+        tree
     }
 
     // Make this associated function private, as it doesn't completely
@@ -106,49 +60,51 @@ where
     // ```
     fn with_depth(tree_depth: usize) -> Self {
         let tree_size = (1 << tree_depth) - 1;
-        let leaf_start_index = if tree_depth == 0 {
+        let leaf_start = if tree_depth == 0 {
             0
         } else {
             (1 << (tree_depth - 1)) - 1
         };
         Self {
-            hashes: vec![None; tree_size],
+            data: vec![TreeNode(None); tree_size],
             tree_depth,
-            leaf_start_index,
+            leaf_start,
         }
     }
 
-    pub fn root(&self) -> Option<Output<B>> {
-        self.hashes[0]
+    pub fn root(&self) -> &TreeNode<B> {
+        &self.data[0]
     }
 
-    pub fn leaves(&self) -> impl Iterator<Item = &Option<Output<B>>> {
-        self.hashes[self.leaf_start_index..].iter()
+    pub fn leaves(&self) -> impl Iterator<Item = &TreeNode<B>> {
+        self.data[self.leaf_start..].iter()
     }
 
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Option<Output<B>>> {
-        self.hashes[self.leaf_start_index..].iter_mut()
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut TreeNode<B>> {
+        self.data[self.leaf_start..].iter_mut()
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
-    pub fn set(&mut self, leaf_offset: usize, hash: Output<B>) -> Result<()> {
-        let leaf = match self.leaves_mut().nth(leaf_offset) {
+    pub fn set(&mut self, index: usize, hash: Output<B>) -> Result<()> {
+        let node = match self.leaves_mut().nth(index) {
             None => Err("invalid leaf offset")?,
-            Some(leaf) => leaf,
+            Some(node) => node,
         };
-        if *leaf == Some(hash) {
+        if node.as_ref() == &hash[..] {
             // no change.
             return Ok(());
         }
-        *leaf = Some(hash);
+        *node = TreeNode::from(hash);
 
         // calculate the merkle root.
-        let mut index = self.leaf_range().start + leaf_offset;
+        let mut index = self.leaf_range().start + index;
         while let Some((left, right)) = siblings(index) {
-            let hash = B::new()
-                .chain_update(self.hash(left)?)
-                .chain_update(self.hash(right)?)
-                .finalize();
+            let hash = TreeNode::from(
+                B::new()
+                    .chain_update(self.hash(left)?)
+                    .chain_update(self.hash(right)?)
+                    .finalize(),
+            );
             let parent = parent(left).unwrap();
             trace!(
                 left_child = %left,
@@ -157,7 +113,7 @@ where
                 ?hash,
                 "hash calculated",
             );
-            self.hashes[parent] = Some(hash);
+            self.data[parent] = hash;
             index = parent;
         }
         Ok(())
@@ -183,7 +139,7 @@ where
 
     fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
         sibling(index)
-            .and_then(|sibling| self.hashes[sibling])
+            .map(|sibling| (&self.data[sibling]).into())
             .map(|hash| (Position::from(index), hash))
     }
 
@@ -204,9 +160,9 @@ where
     fn try_hashes_in_depth_mut(
         &mut self,
         depth: usize,
-    ) -> Result<impl Iterator<Item = &mut Option<Output<B>>>> {
+    ) -> Result<impl Iterator<Item = &mut TreeNode<B>>> {
         let range = self.depth_range(depth).ok_or("invalid depth")?;
-        Ok(self.hashes[range.start..range.end].iter_mut())
+        Ok(self.data[range.start..range.end].iter_mut())
     }
 
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
@@ -217,7 +173,7 @@ where
             }
             0 => Some(Range {
                 start: 0,
-                end: self.hashes.len(),
+                end: self.data.len(),
             }),
             _ => {
                 let start = (1 << (depth - 1)) - 1;
@@ -227,39 +183,120 @@ where
         }
     }
 
-    fn hash(&self, index: usize) -> Result<&Output<B>> {
-        self.hashes
-            .get(index)
-            .and_then(|hash| hash.as_ref())
-            .ok_or_else(|| "missing hash".into())
-    }
-}
-
-impl<B> Debug for MerkleTree<B>
-where
-    B: Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MerkleTree")
-            .field("tree_depth", &self.tree_depth)
-            .field("leaf_start_index", &self.leaf_start_index)
-            .field("root", &self.root())
-            .field("len", &self.hashes.len())
-            .field("leaves_len", &self.leaves().count())
-            .finish()
+    fn hash(&self, index: usize) -> Result<&TreeNode<B>> {
+        self.data.get(index).ok_or_else(|| "missing hash".into())
     }
 }
 
 impl<B> Deref for MerkleTree<B>
 where
-    B: Digest + OutputSizeUser,
+    B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    type Target = [Option<Output<B>>];
+    type Target = [TreeNode<B>];
 
     fn deref(&self) -> &Self::Target {
-        &self.hashes[..]
+        &self.data[..]
+    }
+}
+
+/// Merkle tree node.
+///
+/// It provides the convenient way to access the actual hash value
+/// through the deref method.  The node is always initialized,
+/// e.g., Some(Output<B>) by MerkleTree type.
+#[derive(Copy, Debug)]
+pub struct TreeNode<B>(Option<Output<B>>)
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy;
+
+impl<B> Clone for TreeNode<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<B> AsRef<[u8]> for TreeNode<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    fn as_ref(&self) -> &[u8] {
+        assert!(self.0.is_some(), "accessing uninitialized node");
+        self.0.as_ref().unwrap()
+    }
+}
+
+impl<B> From<&TreeNode<B>> for Output<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    fn from(node: &TreeNode<B>) -> Output<B> {
+        assert!(node.0.is_some(), "accessing uninitialized node");
+        node.0.unwrap()
+    }
+}
+
+impl<B> From<Output<B>> for TreeNode<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    fn from(inner: Output<B>) -> Self {
+        Self(Some(inner))
+    }
+}
+
+struct ParentIterMut<'a, B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    data: &'a mut [TreeNode<B>],
+}
+
+impl<'a, B> Iterator for ParentIterMut<'a, B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    type Item = &'a mut TreeNode<B>;
+
+    // as in [rustomicon]
+    //
+    // [rustomicon]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
+    fn next(&mut self) -> Option<Self::Item> {
+        mem::take(&mut self.data)
+            .split_last_mut()
+            .map(|(parent, data)| {
+                self.data = data;
+                parent
+            })
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Position {
+    Root,
+    Left,
+    Right,
+}
+
+impl From<usize> for Position {
+    fn from(index: usize) -> Self {
+        if index == 0 {
+            Self::Root
+        } else if index & 0x1 == 0x1 {
+            Self::Left
+        } else {
+            Self::Right
+        }
     }
 }
 
@@ -358,7 +395,7 @@ mod tests {
     #[test]
     fn tree_set() {
         let tree = TreeBuilder::build(5);
-        assert_eq!(tree.root().unwrap(), TreeBuilder::SAMPLE_ROOT.into());
+        assert_eq!(tree.root().as_ref(), &TreeBuilder::SAMPLE_ROOT);
     }
 
     #[test]
@@ -369,9 +406,9 @@ mod tests {
             hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
 
         let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(1, SAMPLE_LEAF.into());
-        assert_eq!(tree.root(), Some(SAMPLE_LEAF.into()));
+        assert_eq!(tree.root().as_ref(), &SAMPLE_LEAF);
         let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(20, SAMPLE_LEAF.into());
-        assert_eq!(tree.root(), Some(SAMPLE_ROOT.into()));
+        assert_eq!(tree.root().as_ref(), &SAMPLE_ROOT);
     }
 
     #[test]

@@ -17,15 +17,15 @@ fn main() {
         .unwrap_or(NR_DEPTH);
 
     let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
-    println!("{tree:?}");
-
     for (i, leave) in tree.leaves().take(4).enumerate() {
-        println!("leaf[{i}]={:x?}", leave);
+        println!("leaf[{i}]={:02x?}", leave.as_ref());
     }
     if tree.leaves().count() > 4 {
         println!("truncated {} leaves...", tree.leaves().count() - 4);
     }
-    println!("tree.root={:x?}", tree.root());
+    let root = tree.root().as_ref();
+    println!("tree.root.len={}", root.len());
+    println!("tree.root={:02x?}", root);
 
     if depth < 6 {
         set_leaves(depth)
@@ -44,15 +44,9 @@ fn set_leaves(depth: usize) {
 
     // print out the leaves.
     for (i, leaf) in tree.leaves().enumerate() {
-        match leaf {
-            None => warn!("missing leaf[offset={i}]"),
-            Some(leaf) => info!("leaf[{i}]={:02x?}", leaf),
-        }
+        info!("leaf[{i}]={:02x?}", leaf)
     }
 
     // print out the root.
-    match tree.root() {
-        None => warn!("missing root"),
-        Some(root) => info!("tree.root={:02x?}", root),
-    }
+    info!("tree.node={:02x?}", tree.root());
 }
