@@ -52,6 +52,26 @@ where
         tree
     }
 
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tree.len() == 0
+    }
+
+    /// Panic when called on the empty tree.
+    pub fn root(&self) -> &[u8] {
+        self.tree[0].as_ref()
+    }
+
+    /// Panic when called on the empty tree.
+    pub fn leaves(&self) -> impl Iterator<Item = &[u8]> {
+        self.tree[self.leaf_start..]
+            .iter()
+            .map(|node| node.as_ref())
+    }
+
     // Make this associated function private, as it doesn't completely
     // initialize the table.  For example, the following code will panic:
     //
@@ -72,24 +92,6 @@ where
             tree_depth,
             leaf_start,
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.tree.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.tree.len() == 0
-    }
-
-    pub fn root(&self) -> &[u8] {
-        self.tree[0].as_ref()
-    }
-
-    pub fn leaves(&self) -> impl Iterator<Item = &[u8]> {
-        self.tree[self.leaf_start..]
-            .iter()
-            .map(|node| node.as_ref())
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Node<B>> {
