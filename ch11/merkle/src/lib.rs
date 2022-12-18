@@ -17,7 +17,7 @@ where
     B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy + Clone,
 {
-    data: Vec<TreeNode<B>>,
+    tree: Vec<TreeNode<B>>,
     tree_depth: usize,
     leaf_start: usize,
 }
@@ -33,19 +33,21 @@ where
     ///
     /// Let me think about it and come back with the better approach
     /// in the future iteration.
-    pub fn with_depth_and_leaf(depth: usize, leaf: Output<B>) -> Self {
+    pub fn with_depth_and_leaf(depth: usize, hash: Output<B>) -> Self {
         let mut tree = Self::with_depth(depth);
-        let mut leaf = TreeNode::from(leaf);
-        tree.leaves_mut().for_each(|node| *node = leaf.clone());
 
-        // calculate the merkle root.
+        // set the leaf node first with the provided hash.
+        let mut node = TreeNode::from(hash);
+        tree.leaves_mut().for_each(|leaf| *leaf = node.clone());
+
+        // then calculate the merkle root.
         for depth in (1..depth).rev() {
             let parent =
-                TreeNode::from(B::new().chain_update(&leaf).chain_update(&leaf).finalize());
+                TreeNode::from(B::new().chain_update(&node).chain_update(&node).finalize());
             tree.try_hashes_in_depth_mut(depth)
                 .unwrap()
                 .for_each(|node| *node = parent.clone());
-            leaf = parent;
+            node = parent;
         }
         tree
     }
@@ -66,22 +68,22 @@ where
             (1 << (tree_depth - 1)) - 1
         };
         Self {
-            data: vec![TreeNode(None); tree_size],
+            tree: vec![TreeNode(None); tree_size],
             tree_depth,
             leaf_start,
         }
     }
 
     pub fn root(&self) -> &TreeNode<B> {
-        &self.data[0]
+        &self.tree[0]
     }
 
     pub fn leaves(&self) -> impl Iterator<Item = &TreeNode<B>> {
-        self.data[self.leaf_start..].iter()
+        self.tree[self.leaf_start..].iter()
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut TreeNode<B>> {
-        self.data[self.leaf_start..].iter_mut()
+        self.tree[self.leaf_start..].iter_mut()
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
@@ -113,7 +115,7 @@ where
                 ?hash,
                 "hash calculated",
             );
-            self.data[parent] = hash;
+            self.tree[parent] = hash;
             index = parent;
         }
         Ok(())
@@ -139,7 +141,7 @@ where
 
     fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
         sibling(index)
-            .map(|sibling| (&self.data[sibling]).into())
+            .map(|sibling| (&self.tree[sibling]).into())
             .map(|hash| (Position::from(index), hash))
     }
 
@@ -162,7 +164,7 @@ where
         depth: usize,
     ) -> Result<impl Iterator<Item = &mut TreeNode<B>>> {
         let range = self.depth_range(depth).ok_or("invalid depth")?;
-        Ok(self.data[range.start..range.end].iter_mut())
+        Ok(self.tree[range.start..range.end].iter_mut())
     }
 
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
@@ -173,7 +175,7 @@ where
             }
             0 => Some(Range {
                 start: 0,
-                end: self.data.len(),
+                end: self.tree.len(),
             }),
             _ => {
                 let start = (1 << (depth - 1)) - 1;
@@ -184,7 +186,7 @@ where
     }
 
     fn hash(&self, index: usize) -> Result<&TreeNode<B>> {
-        self.data.get(index).ok_or_else(|| "missing hash".into())
+        self.tree.get(index).ok_or_else(|| "missing hash".into())
     }
 }
 
@@ -196,7 +198,7 @@ where
     type Target = [TreeNode<B>];
 
     fn deref(&self) -> &Self::Target {
-        &self.data[..]
+        &self.tree[..]
     }
 }
 
@@ -258,7 +260,7 @@ where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    data: &'a mut [TreeNode<B>],
+    tree: &'a mut [TreeNode<B>],
 }
 
 impl<'a, B> Iterator for ParentIterMut<'a, B>
@@ -272,10 +274,10 @@ where
     //
     // [rustomicon]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
     fn next(&mut self) -> Option<Self::Item> {
-        mem::take(&mut self.data)
+        mem::take(&mut self.tree)
             .split_last_mut()
-            .map(|(parent, data)| {
-                self.data = data;
+            .map(|(parent, tree)| {
+                self.tree = tree;
                 parent
             })
     }
