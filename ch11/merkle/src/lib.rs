@@ -18,7 +18,7 @@ where
     B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy + Clone,
 {
-    tree: Vec<TreeNode<B>>,
+    tree: Vec<Node<B>>,
     tree_depth: usize,
     leaf_start: usize,
 }
@@ -38,13 +38,12 @@ where
         let mut tree = Self::with_depth(depth);
 
         // set the leaf node first with the provided hash.
-        let mut node = TreeNode::from(hash);
+        let mut node = Node::from(hash);
         tree.leaves_mut().for_each(|leaf| *leaf = node.clone());
 
         // then calculate the merkle root.
         for depth in (1..depth).rev() {
-            let parent =
-                TreeNode::from(B::new().chain_update(&node).chain_update(&node).finalize());
+            let parent = Node::from(B::new().chain_update(&node).chain_update(&node).finalize());
             tree.try_hashes_in_depth_mut(depth)
                 .unwrap()
                 .for_each(|node| *node = parent.clone());
@@ -69,7 +68,7 @@ where
             (1 << (tree_depth - 1)) - 1
         };
         Self {
-            tree: vec![TreeNode::default(); tree_size],
+            tree: vec![Node::default(); tree_size],
             tree_depth,
             leaf_start,
         }
@@ -93,7 +92,7 @@ where
             .map(|node| node.as_ref())
     }
 
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut TreeNode<B>> {
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Node<B>> {
         self.tree[self.leaf_start..].iter_mut()
     }
 
@@ -107,12 +106,12 @@ where
             // no change.
             return Ok(());
         }
-        *node = TreeNode::from(hash);
+        *node = Node::from(hash);
 
         // calculate the merkle root.
         let mut index = self.leaf_range().start + index;
         while let Some((left, right)) = siblings(index) {
-            let hash = TreeNode::from(
+            let hash = Node::from(
                 B::new()
                     .chain_update(self.hash(left)?)
                     .chain_update(self.hash(right)?)
@@ -173,7 +172,7 @@ where
     fn try_hashes_in_depth_mut(
         &mut self,
         depth: usize,
-    ) -> Result<impl Iterator<Item = &mut TreeNode<B>>> {
+    ) -> Result<impl Iterator<Item = &mut Node<B>>> {
         let range = self.depth_range(depth).ok_or("invalid depth")?;
         Ok(self.tree[range.start..range.end].iter_mut())
     }
@@ -196,7 +195,7 @@ where
         }
     }
 
-    fn hash(&self, index: usize) -> Result<&TreeNode<B>> {
+    fn hash(&self, index: usize) -> Result<&Node<B>> {
         self.tree.get(index).ok_or_else(|| "missing hash".into())
     }
 }
@@ -207,12 +206,12 @@ where
 /// through the deref method.  The node is always initialized,
 /// e.g., Some(Output<B>) by MerkleTree type.
 #[derive(Copy, Debug)]
-struct TreeNode<B>(Option<Output<B>>)
+struct Node<B>(Option<Output<B>>)
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy;
 
-impl<B> Clone for TreeNode<B>
+impl<B> Clone for Node<B>
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
@@ -222,7 +221,7 @@ where
     }
 }
 
-impl<B> Default for TreeNode<B>
+impl<B> Default for Node<B>
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
@@ -232,7 +231,7 @@ where
     }
 }
 
-impl<B> AsRef<[u8]> for TreeNode<B>
+impl<B> AsRef<[u8]> for Node<B>
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
@@ -243,18 +242,18 @@ where
     }
 }
 
-impl<B> From<&TreeNode<B>> for Output<B>
+impl<B> From<&Node<B>> for Output<B>
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    fn from(node: &TreeNode<B>) -> Output<B> {
+    fn from(node: &Node<B>) -> Output<B> {
         assert!(node.0.is_some(), "accessing uninitialized node");
         node.0.unwrap()
     }
 }
 
-impl<B> From<Output<B>> for TreeNode<B>
+impl<B> From<Output<B>> for Node<B>
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
@@ -269,7 +268,7 @@ where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    tree: &'a mut [TreeNode<B>],
+    tree: &'a mut [Node<B>],
 }
 
 impl<'a, B> Iterator for ParentIterMut<'a, B>
@@ -277,7 +276,7 @@ where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    type Item = &'a mut TreeNode<B>;
+    type Item = &'a mut Node<B>;
 
     // as in [rustomicon]
     //
