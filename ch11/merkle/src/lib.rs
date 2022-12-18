@@ -69,7 +69,7 @@ where
             (1 << (tree_depth - 1)) - 1
         };
         Self {
-            tree: vec![TreeNode(None); tree_size],
+            tree: vec![TreeNode::default(); tree_size],
             tree_depth,
             leaf_start,
         }
@@ -219,6 +219,16 @@ where
 {
     fn clone(&self) -> Self {
         Self(self.0)
+    }
+}
+
+impl<B> Default for TreeNode<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    fn default() -> Self {
+        Self(None)
     }
 }
 
