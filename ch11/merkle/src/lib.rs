@@ -72,32 +72,6 @@ where
             .map(|node| node.as_ref())
     }
 
-    // Make this associated function private, as it doesn't completely
-    // initialize the table.  For example, the following code will panic:
-    //
-    // ```
-    // let mut table = MerkleTree::with_depth(20);
-    //
-    // table.set(0, [11u8; 32].into());
-    // ```
-    fn with_depth(tree_depth: usize) -> Self {
-        let tree_size = (1 << tree_depth) - 1;
-        let leaf_start = if tree_depth == 0 {
-            0
-        } else {
-            (1 << (tree_depth - 1)) - 1
-        };
-        Self {
-            tree: vec![Node::default(); tree_size],
-            tree_depth,
-            leaf_start,
-        }
-    }
-
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Node<B>> {
-        self.tree[self.leaf_start..].iter_mut()
-    }
-
     #[instrument(name = "MerkleTree::set", skip(self), err)]
     pub fn set(&mut self, index: usize, hash: Input<B>) -> Result<()> {
         let node = match self.leaves_mut().nth(index) {
@@ -149,6 +123,32 @@ where
             }
         }
         Ok(proof)
+    }
+
+    // Make this associated function private, as it doesn't completely
+    // initialize the table.  For example, the following code will panic:
+    //
+    // ```
+    // let mut table = MerkleTree::with_depth(20);
+    //
+    // table.set(0, [11u8; 32].into());
+    // ```
+    fn with_depth(tree_depth: usize) -> Self {
+        let tree_size = (1 << tree_depth) - 1;
+        let leaf_start = if tree_depth == 0 {
+            0
+        } else {
+            (1 << (tree_depth - 1)) - 1
+        };
+        Self {
+            tree: vec![Node::default(); tree_size],
+            tree_depth,
+            leaf_start,
+        }
+    }
+
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Node<B>> {
+        self.tree[self.leaf_start..].iter_mut()
     }
 
     fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
