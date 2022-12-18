@@ -9,6 +9,7 @@ use std::result;
 use tracing::{instrument, trace, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
+type Input<B> = Output<B>;
 
 /// MerkleTree.
 #[derive(Debug)]
@@ -33,7 +34,7 @@ where
     ///
     /// Let me think about it and come back with the better approach
     /// in the future iteration.
-    pub fn with_depth_and_leaf(depth: usize, hash: Output<B>) -> Self {
+    pub fn with_depth_and_leaf(depth: usize, hash: Input<B>) -> Self {
         let mut tree = Self::with_depth(depth);
 
         // set the leaf node first with the provided hash.
@@ -74,12 +75,14 @@ where
         }
     }
 
-    pub fn root(&self) -> &TreeNode<B> {
-        &self.tree[0]
+    pub fn root(&self) -> &[u8] {
+        self.tree[0].as_ref()
     }
 
-    pub fn leaves(&self) -> impl Iterator<Item = &TreeNode<B>> {
-        self.tree[self.leaf_start..].iter()
+    pub fn leaves(&self) -> impl Iterator<Item = &[u8]> {
+        self.tree[self.leaf_start..]
+            .iter()
+            .map(|node| node.as_ref())
     }
 
     fn leaves_mut(&mut self) -> impl Iterator<Item = &mut TreeNode<B>> {
@@ -87,7 +90,7 @@ where
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
-    pub fn set(&mut self, index: usize, hash: Output<B>) -> Result<()> {
+    pub fn set(&mut self, index: usize, hash: Input<B>) -> Result<()> {
         let node = match self.leaves_mut().nth(index) {
             None => Err("invalid leaf offset")?,
             Some(node) => node,
@@ -408,9 +411,9 @@ mod tests {
             hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
 
         let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(1, SAMPLE_LEAF.into());
-        assert_eq!(tree.root().as_ref(), &SAMPLE_LEAF);
+        assert_eq!(tree.root(), &SAMPLE_LEAF);
         let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(20, SAMPLE_LEAF.into());
-        assert_eq!(tree.root().as_ref(), &SAMPLE_ROOT);
+        assert_eq!(tree.root(), &SAMPLE_ROOT);
     }
 
     #[test]

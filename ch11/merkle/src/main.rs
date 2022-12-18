@@ -18,12 +18,12 @@ fn main() {
 
     let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
     for (i, leave) in tree.leaves().take(4).enumerate() {
-        println!("leaf[{i}]={:02x?}", leave.as_ref());
+        println!("leaf[{i}]={:02x?}", leave);
     }
     if tree.leaves().count() > 4 {
         println!("truncated {} leaves...", tree.leaves().count() - 4);
     }
-    let root = tree.root().as_ref();
+    let root = tree.root();
     println!("tree.root.len={}", root.len());
     println!("tree.root={:02x?}", root);
 
