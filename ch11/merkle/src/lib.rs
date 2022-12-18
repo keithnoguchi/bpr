@@ -4,7 +4,7 @@ use generic_array::ArrayLength;
 use std::error::Error;
 use std::fmt::Debug;
 use std::mem;
-use std::ops::{Deref, Range};
+use std::ops::Range;
 use std::result;
 use tracing::{instrument, trace, warn};
 
@@ -75,6 +75,14 @@ where
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tree.len() == 0
+    }
+
     pub fn root(&self) -> &[u8] {
         self.tree[0].as_ref()
     }
@@ -112,11 +120,11 @@ where
             );
             let parent = parent(left).unwrap();
             trace!(
-                left_child = %left,
-                right_child = %right,
-                index = %parent,
-                ?hash,
-                "hash calculated",
+                left_child_index = %left,
+                right_child_index = %right,
+                parent_index = %parent,
+                parent_hash = ?hash.as_ref(),
+                "parent hash calculated",
             );
             self.tree[parent] = hash;
             index = parent;
@@ -193,25 +201,13 @@ where
     }
 }
 
-impl<B> Deref for MerkleTree<B>
-where
-    B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
-{
-    type Target = [TreeNode<B>];
-
-    fn deref(&self) -> &Self::Target {
-        &self.tree[..]
-    }
-}
-
 /// Merkle tree node.
 ///
 /// It provides the convenient way to access the actual hash value
 /// through the deref method.  The node is always initialized,
 /// e.g., Some(Output<B>) by MerkleTree type.
 #[derive(Copy, Debug)]
-pub struct TreeNode<B>(Option<Output<B>>)
+struct TreeNode<B>(Option<Output<B>>)
 where
     B: Debug + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy;
