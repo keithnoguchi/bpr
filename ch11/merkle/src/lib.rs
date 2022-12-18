@@ -44,7 +44,7 @@ where
         // then calculate the merkle root.
         for depth in (1..depth).rev() {
             let parent = Node::from(B::new().chain_update(&node).chain_update(&node).finalize());
-            tree.try_hashes_in_depth_mut(depth)
+            tree.try_nodes_in_depth_mut(depth)
                 .unwrap()
                 .for_each(|node| *node = parent.clone());
             node = parent;
@@ -169,7 +169,7 @@ where
         self.depth_range(self.tree_depth).unwrap()
     }
 
-    fn try_hashes_in_depth_mut(
+    fn try_nodes_in_depth_mut(
         &mut self,
         depth: usize,
     ) -> Result<impl Iterator<Item = &mut Node<B>>> {
@@ -422,44 +422,44 @@ mod tests {
     }
 
     #[test]
-    fn tree_try_hashes_in_depth_mut() {
+    fn tree_try_nodes_in_depth_mut() {
         assert_eq!(
             TreeBuilder::build(1)
-                .try_hashes_in_depth_mut(0)
+                .try_nodes_in_depth_mut(0)
                 .unwrap()
                 .count(),
             1,
         );
         assert_eq!(
             TreeBuilder::build(1)
-                .try_hashes_in_depth_mut(1)
+                .try_nodes_in_depth_mut(1)
                 .unwrap()
                 .count(),
             1,
         );
-        assert!(TreeBuilder::build(1).try_hashes_in_depth_mut(2).is_err());
+        assert!(TreeBuilder::build(1).try_nodes_in_depth_mut(2).is_err());
         assert_eq!(
             TreeBuilder::build(2)
-                .try_hashes_in_depth_mut(0)
+                .try_nodes_in_depth_mut(0)
                 .unwrap()
                 .count(),
             3,
         );
         assert_eq!(
             TreeBuilder::build(2)
-                .try_hashes_in_depth_mut(1)
+                .try_nodes_in_depth_mut(1)
                 .unwrap()
                 .count(),
             1,
         );
         assert_eq!(
             TreeBuilder::build(2)
-                .try_hashes_in_depth_mut(2)
+                .try_nodes_in_depth_mut(2)
                 .unwrap()
                 .count(),
             2,
         );
-        assert!(TreeBuilder::build(2).try_hashes_in_depth_mut(3).is_err());
+        assert!(TreeBuilder::build(2).try_nodes_in_depth_mut(3).is_err());
     }
 
     #[test]
