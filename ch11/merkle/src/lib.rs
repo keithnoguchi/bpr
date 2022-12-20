@@ -9,14 +9,13 @@ use std::result;
 use tracing::{instrument, trace, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
-type Input<B> = Output<B>;
 
 /// MerkleTree.
 #[derive(Debug)]
 pub struct MerkleTree<B>
 where
     B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy + Clone,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     tree: Vec<Node<B>>,
     tree_depth: usize,
@@ -34,11 +33,11 @@ where
     ///
     /// Let me think about it and come back with the better approach
     /// in the future iteration.
-    pub fn with_depth_and_leaf(depth: usize, hash: Input<B>) -> Self {
+    pub fn with_depth_and_leaf(depth: usize, hash: &[u8]) -> Result<Self> {
         let mut tree = Self::with_depth(depth);
 
         // set the leaf node first with the provided hash.
-        let mut node = Node::from(hash);
+        let mut node = Node::try_from(hash)?;
         tree.leaves_mut().for_each(|leaf| *leaf = node.clone());
 
         // then calculate the merkle root.
@@ -49,7 +48,7 @@ where
                 .for_each(|node| *node = parent.clone());
             node = parent;
         }
-        tree
+        Ok(tree)
     }
 
     pub fn len(&self) -> usize {
@@ -73,16 +72,16 @@ where
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
-    pub fn set(&mut self, index: usize, hash: Input<B>) -> Result<()> {
+    pub fn set(&mut self, index: usize, hash: &[u8]) -> Result<()> {
         let node = match self.leaves_mut().nth(index) {
             None => Err("invalid leaf offset")?,
             Some(node) => node,
         };
-        if node.as_ref() == &hash[..] {
+        if node.as_ref() == hash {
             // no change.
             return Ok(());
         }
-        *node = Node::from(hash);
+        *node = Node::try_from(hash)?;
 
         // calculate the merkle root.
         let mut index = self.leaf_range().start + index;
@@ -131,7 +130,7 @@ where
     // ```
     // let mut table = MerkleTree::with_depth(20);
     //
-    // table.set(0, [11u8; 32].into());
+    // table.set(0, [11u8; 32]);
     // ```
     fn with_depth(tree_depth: usize) -> Self {
         let tree_size = (1 << tree_depth) - 1;
@@ -241,6 +240,21 @@ where
     fn as_ref(&self) -> &[u8] {
         assert!(self.0.is_some(), "accessing uninitialized node");
         self.0.as_ref().unwrap()
+    }
+}
+
+impl<B> TryFrom<&[u8]> for Node<B>
+where
+    B: Debug + OutputSizeUser,
+    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+{
+    type Error = &'static str;
+
+    fn try_from(slice: &[u8]) -> result::Result<Self, Self::Error> {
+        if slice.len() != B::output_size() {
+            return Err("invalid slice length");
+        }
+        Ok(Self(Some(Output::<B>::clone_from_slice(slice))))
     }
 }
 
@@ -405,21 +419,15 @@ mod tests {
     }
 
     #[test]
-    fn tree_set() {
-        let tree = TreeBuilder::build(5);
-        assert_eq!(tree.root().as_ref(), &TreeBuilder::SAMPLE_ROOT);
-    }
-
-    #[test]
     fn tree_root() {
         const SAMPLE_LEAF: [u8; 32] =
             hex!("abababababababababababababababababababababababababababababababab");
         const SAMPLE_ROOT: [u8; 32] =
             hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
 
-        let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(1, SAMPLE_LEAF.into());
+        let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(1, &SAMPLE_LEAF).unwrap();
         assert_eq!(tree.root(), &SAMPLE_LEAF);
-        let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(20, SAMPLE_LEAF.into());
+        let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(20, &SAMPLE_LEAF).unwrap();
         assert_eq!(tree.root(), &SAMPLE_ROOT);
     }
 
@@ -482,17 +490,10 @@ mod tests {
 
     #[test]
     fn tree_len() {
-        let leaf = [0u8; 32];
-        assert_eq!(
-            MerkleTree::<Sha3_256>::with_depth_and_leaf(0, leaf.into()).len(),
-            0
-        );
+        assert_eq!(MerkleTree::<Sha3_256>::with_depth(0).len(), 0);
         for depth in 1..=10 {
             let want = (1 << depth) - 1;
-            assert_eq!(
-                MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, leaf.into()).len(),
-                want
-            );
+            assert_eq!(MerkleTree::<Sha3_256>::with_depth(depth).len(), want);
         }
     }
 
@@ -500,15 +501,17 @@ mod tests {
     fn tree_leaves_count() {
         let leaf = [0u8; 32];
         assert_eq!(
-            MerkleTree::<Sha3_256>::with_depth_and_leaf(0, leaf.into())
+            MerkleTree::<Sha3_256>::with_depth_and_leaf(0, &leaf)
+                .unwrap()
                 .leaves()
                 .count(),
-            0
+            0,
         );
         for depth in 1..=10 {
             let want = 1 << depth - 1;
             assert_eq!(
-                MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, leaf.into())
+                MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &leaf)
+                    .unwrap()
                     .leaves()
                     .count(),
                 want,
@@ -660,15 +663,12 @@ mod tests {
     struct TreeBuilder;
 
     impl TreeBuilder {
-        const SAMPLE_ROOT: [u8; 32] =
-            hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
-
         fn build(depth: usize) -> MerkleTree<Sha3_256> {
             let leaf = [0u8; 32];
-            let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, leaf.into());
+            let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &leaf).unwrap();
             for i in 0..tree.leaves().count() {
                 let leaf = [0x11 * i as u8; 32];
-                tree.set(i, leaf.into()).unwrap();
+                tree.set(i, &leaf).unwrap();
             }
             tree
         }

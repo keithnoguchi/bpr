@@ -16,7 +16,7 @@ fn main() {
         .and_then(|v| usize::from_str(v).ok())
         .unwrap_or(NR_DEPTH);
 
-    let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_LEAF_HASH.into());
+    let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &NR_LEAF_HASH).unwrap();
     for (i, leave) in tree.leaves().take(4).enumerate() {
         println!("leaf[{i}]={:02x?}", leave);
     }
@@ -34,12 +34,12 @@ fn main() {
 
 #[instrument]
 fn set_leaves(depth: usize) {
-    let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, NR_ZERO_HASH.into());
+    let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &NR_ZERO_HASH).unwrap();
 
     // set the leaves.
     for i in 0..tree.leaves().count() {
         let hash = [0x11u8 * i as u8; 32];
-        tree.set(i, hash.into()).unwrap();
+        tree.set(i, &hash).unwrap();
     }
 
     // print out the leaves.
