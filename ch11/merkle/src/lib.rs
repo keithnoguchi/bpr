@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::mem;
 use std::ops::Range;
 use std::result;
-use tracing::{instrument, trace, warn};
+use tracing::{instrument, warn};
 
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
@@ -84,25 +84,8 @@ where
         *node = Node::try_from(hash)?;
 
         // calculate the merkle root.
-        let mut index = self.leaf_range().start + index;
-        while let Some((left, right)) = siblings(index) {
-            let hash = Node::from(
-                B::new()
-                    .chain_update(self.hash(left)?)
-                    .chain_update(self.hash(right)?)
-                    .finalize(),
-            );
-            let parent = parent(left).unwrap();
-            trace!(
-                left_child_index = %left,
-                right_child_index = %right,
-                parent_index = %parent,
-                parent_hash = ?hash.as_ref(),
-                "parent hash calculated",
-            );
-            self.tree[parent] = hash;
-            index = parent;
-        }
+        for _ in self.merkle_root_iter(self.leaf_start + index) {}
+
         Ok(())
     }
 
@@ -150,6 +133,14 @@ where
         self.tree[self.leaf_start..].iter_mut()
     }
 
+    fn merkle_root_iter(&mut self, index: usize) -> MerkleRootIter<B> {
+        let index = if index & 1 == 1 { index + 1 } else { index };
+        assert!(index < self.tree.len(), "invalid child index");
+        MerkleRootIter {
+            tree: &mut self.tree[..=index],
+        }
+    }
+
     fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
         sibling(index)
             .map(|sibling| (&self.tree[sibling]).into())
@@ -194,10 +185,6 @@ where
                 Some(Range { start, end })
             }
         }
-    }
-
-    fn hash(&self, index: usize) -> Result<&Node<B>> {
-        self.tree.get(index).ok_or_else(|| "missing hash".into())
     }
 }
 
@@ -279,31 +266,46 @@ where
     }
 }
 
-struct ParentIterMut<'a, B>
+struct MerkleRootIter<'a, B>
 where
-    B: Debug + OutputSizeUser,
+    B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
     tree: &'a mut [Node<B>],
 }
 
-impl<'a, B> Iterator for ParentIterMut<'a, B>
+impl<'a, B> Iterator for MerkleRootIter<'a, B>
 where
-    B: Debug + OutputSizeUser,
+    B: Debug + Digest + OutputSizeUser,
     <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
 {
-    type Item = &'a mut Node<B>;
+    type Item = Output<B>;
 
-    // as in [rustomicon]
-    //
-    // [rustomicon]: https://doc.rust-lang.org/nomicon/borrow-splitting.html
     fn next(&mut self) -> Option<Self::Item> {
-        mem::take(&mut self.tree)
-            .split_last_mut()
-            .map(|(parent, tree)| {
-                self.tree = tree;
-                parent
-            })
+        if self.tree.is_empty() {
+            return None;
+        }
+
+        // get the left and right child.
+        assert!(self.tree.len() >= 3, "invalid index calculation");
+        let (right, tree) = mem::take(&mut self.tree).split_last_mut().unwrap();
+        let (left, tree) = tree.split_last_mut().unwrap();
+
+        // calculate the parent hash.
+        let parent_index = (tree.len() - 1) / 2;
+        let hash = B::new().chain_update(&left).chain_update(&right).finalize();
+        tree[parent_index] = Node::from(hash);
+
+        // update the tree in the iterator.
+        self.tree = if parent_index == 0 {
+            &mut []
+        } else if parent_index & 1 == 1 {
+            &mut tree[..=parent_index + 1]
+        } else {
+            &mut tree[..=parent_index]
+        };
+
+        Some(hash)
     }
 }
 
@@ -361,16 +363,6 @@ fn sibling(index: usize) -> Option<usize> {
     }
 }
 
-fn siblings(index: usize) -> Option<(usize, usize)> {
-    sibling(index).map(|sibling| {
-        if index < sibling {
-            (index, sibling)
-        } else {
-            (sibling, index)
-        }
-    })
-}
-
 fn ancesters(mut index: usize) -> Vec<usize> {
     let mut ancesters = vec![];
     while let Some(parent) = parent(index) {
@@ -387,7 +379,7 @@ pub fn base(index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ancesters, parent, sibling, siblings};
+    use super::{ancesters, parent, sibling};
     use super::{base, depth_and_offset, index};
     use super::{MerkleTree, Position};
     use hex_literal::hex;
@@ -593,17 +585,6 @@ mod tests {
         assert_eq!(sibling(4), Some(3));
         assert_eq!(sibling(5), Some(6));
         assert_eq!(sibling(6), Some(5));
-    }
-
-    #[test]
-    fn test_sibligs() {
-        assert_eq!(siblings(0), None);
-        assert_eq!(siblings(1), Some((1, 2)));
-        assert_eq!(siblings(2), Some((1, 2)));
-        assert_eq!(siblings(3), Some((3, 4)));
-        assert_eq!(siblings(4), Some((3, 4)));
-        assert_eq!(siblings(5), Some((5, 6)));
-        assert_eq!(siblings(6), Some((5, 6)));
     }
 
     #[test]
