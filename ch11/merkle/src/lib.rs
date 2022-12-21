@@ -16,7 +16,7 @@ type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 #[derive(Debug)]
 pub struct MerkleTree<B>
 where
-    B: Debug + Digest + OutputSizeUser,
+    B: Debug + Digest,
     Data<B>: Copy,
 {
     data: Vec<NodeData<B>>,
@@ -26,7 +26,7 @@ where
 
 impl<B> MerkleTree<B>
 where
-    B: Debug + Digest + OutputSizeUser,
+    B: Debug + Digest,
     Data<B>: Copy,
 {
     /// I'm not convinced with the name of this function, because
@@ -197,7 +197,7 @@ where
 
 impl<'a, B> MerkleProofIter<'a, B>
 where
-    B: Debug + Digest + OutputSizeUser,
+    B: Debug + Digest,
     Data<B>: Copy,
 {
     pub fn verify<T>(self, leaf: T) -> Output<B>
@@ -255,7 +255,7 @@ where
 
 struct ParentHashIterMut<'a, B>
 where
-    B: Debug + Digest + OutputSizeUser,
+    B: Debug + Digest,
     Data<B>: Copy,
 {
     data: &'a mut [NodeData<B>],
@@ -263,7 +263,7 @@ where
 
 impl<'a, B> Iterator for ParentHashIterMut<'a, B>
 where
-    B: Debug + Digest + OutputSizeUser,
+    B: Debug + Digest,
     Data<B>: Copy,
 {
     type Item = Output<B>;
