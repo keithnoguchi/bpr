@@ -253,6 +253,49 @@ where
     }
 }
 
+struct ParentHashIterMut<'a, B>
+where
+    B: Debug + Digest + OutputSizeUser,
+    Data<B>: Copy,
+{
+    data: &'a mut [NodeData<B>],
+}
+
+impl<'a, B> Iterator for ParentHashIterMut<'a, B>
+where
+    B: Debug + Digest + OutputSizeUser,
+    Data<B>: Copy,
+{
+    type Item = Output<B>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.data.is_empty() {
+            return None;
+        }
+
+        // get the left and right child.
+        assert!(self.data.len() >= 3, "invalid index calculation");
+        let (right, data) = mem::take(&mut self.data).split_last_mut().unwrap();
+        let (left, data) = data.split_last_mut().unwrap();
+
+        // calculate the parent hash.
+        let parent_index = (data.len() - 1) / 2;
+        let hash = B::new().chain_update(&left).chain_update(&right).finalize();
+        data[parent_index] = NodeData::from(hash);
+
+        // update the data in the iterator.
+        self.data = if parent_index == 0 {
+            &mut []
+        } else if parent_index & 1 == 1 {
+            &mut data[..=parent_index + 1]
+        } else {
+            &mut data[..=parent_index]
+        };
+
+        Some(hash)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MerkleNodeKind {
     Root,
@@ -376,84 +419,8 @@ where
     }
 }
 
-struct ParentHashIterMut<'a, B>
-where
-    B: Debug + Digest + OutputSizeUser,
-    Data<B>: Copy,
-{
-    data: &'a mut [NodeData<B>],
-}
-
-impl<'a, B> Iterator for ParentHashIterMut<'a, B>
-where
-    B: Debug + Digest + OutputSizeUser,
-    Data<B>: Copy,
-{
-    type Item = Output<B>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.data.is_empty() {
-            return None;
-        }
-
-        // get the left and right child.
-        assert!(self.data.len() >= 3, "invalid index calculation");
-        let (right, data) = mem::take(&mut self.data).split_last_mut().unwrap();
-        let (left, data) = data.split_last_mut().unwrap();
-
-        // calculate the parent hash.
-        let parent_index = (data.len() - 1) / 2;
-        let hash = B::new().chain_update(&left).chain_update(&right).finalize();
-        data[parent_index] = NodeData::from(hash);
-
-        // update the data in the iterator.
-        self.data = if parent_index == 0 {
-            &mut []
-        } else if parent_index & 1 == 1 {
-            &mut data[..=parent_index + 1]
-        } else {
-            &mut data[..=parent_index]
-        };
-
-        Some(hash)
-    }
-}
-
-pub fn index(depth: usize, offset: usize) -> usize {
-    let width = 0x1 << depth;
-    assert!(offset < width, "invalid offset");
-    width - 1 + offset
-}
-
-fn depth_and_offset(index: usize) -> (usize, usize) {
-    // log2(index)
-    let mut depth = 0;
-    let mut x = (index + 1) >> 1;
-    while x != 0 {
-        depth += 1;
-        x >>= 1;
-    }
-    let base = (0x1 << depth) - 1;
-    let offset = index - base;
-    (depth, offset)
-}
-
-pub fn parent(index: usize) -> Option<usize> {
-    if index == 0 {
-        None
-    } else {
-        Some((index - 1) >> 1)
-    }
-}
-
-pub fn base(index: usize) -> usize {
-    let (_, offset) = depth_and_offset(index);
-    index - offset
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{base, depth_and_offset, index, parent};
     use super::{MerkleNodeKind, MerkleTree};
     use hex_literal::hex;
     use sha3::Sha3_256;
@@ -575,90 +542,6 @@ mod tests {
                 want,
             );
         }
-    }
-
-    #[test]
-    fn test_index() {
-        assert_eq!(index(0, 0), 0);
-        assert_eq!(index(1, 0), 1);
-        assert_eq!(index(1, 1), 2);
-        assert_eq!(index(2, 0), 3);
-        assert_eq!(index(2, 1), 4);
-        assert_eq!(index(2, 2), 5);
-        assert_eq!(index(2, 3), 6);
-        assert_eq!(index(3, 0), 7);
-        assert_eq!(index(3, 1), 8);
-        assert_eq!(index(3, 2), 9);
-        assert_eq!(index(3, 3), 10);
-        assert_eq!(index(3, 4), 11);
-        assert_eq!(index(3, 5), 12);
-        assert_eq!(index(3, 6), 13);
-        assert_eq!(index(3, 7), 14);
-    }
-
-    #[test]
-    fn test_index_panic() {
-        assert!(std::panic::catch_unwind(|| index(0, 1)).is_err());
-        assert!(std::panic::catch_unwind(|| index(1, 2)).is_err());
-        assert!(std::panic::catch_unwind(|| index(2, 4)).is_err());
-        assert!(std::panic::catch_unwind(|| index(3, 8)).is_err());
-    }
-
-    #[test]
-    fn test_depth_and_offset() {
-        assert_eq!(depth_and_offset(0), (0, 0));
-        assert_eq!(depth_and_offset(1), (1, 0));
-        assert_eq!(depth_and_offset(2), (1, 1));
-        assert_eq!(depth_and_offset(3), (2, 0));
-        assert_eq!(depth_and_offset(4), (2, 1));
-        assert_eq!(depth_and_offset(5), (2, 2));
-        assert_eq!(depth_and_offset(6), (2, 3));
-        assert_eq!(depth_and_offset(7), (3, 0));
-        assert_eq!(depth_and_offset(8), (3, 1));
-        assert_eq!(depth_and_offset(9), (3, 2));
-        assert_eq!(depth_and_offset(10), (3, 3));
-        assert_eq!(depth_and_offset(11), (3, 4));
-        assert_eq!(depth_and_offset(12), (3, 5));
-        assert_eq!(depth_and_offset(13), (3, 6));
-        assert_eq!(depth_and_offset(14), (3, 7));
-    }
-
-    #[test]
-    fn test_parent() {
-        assert_eq!(parent(0), None);
-        assert_eq!(parent(1), Some(0));
-        assert_eq!(parent(2), Some(0));
-        assert_eq!(parent(3), Some(1));
-        assert_eq!(parent(4), Some(1));
-        assert_eq!(parent(5), Some(2));
-        assert_eq!(parent(6), Some(2));
-        assert_eq!(parent(7), Some(3));
-        assert_eq!(parent(8), Some(3));
-        assert_eq!(parent(9), Some(4));
-        assert_eq!(parent(10), Some(4));
-        assert_eq!(parent(11), Some(5));
-        assert_eq!(parent(12), Some(5));
-        assert_eq!(parent(13), Some(6));
-        assert_eq!(parent(14), Some(6));
-    }
-
-    #[test]
-    fn test_base() {
-        assert_eq!(base(0), 0);
-        assert_eq!(base(1), 1);
-        assert_eq!(base(2), 1);
-        assert_eq!(base(3), 3);
-        assert_eq!(base(4), 3);
-        assert_eq!(base(5), 3);
-        assert_eq!(base(6), 3);
-        assert_eq!(base(7), 7);
-        assert_eq!(base(8), 7);
-        assert_eq!(base(9), 7);
-        assert_eq!(base(10), 7);
-        assert_eq!(base(11), 7);
-        assert_eq!(base(12), 7);
-        assert_eq!(base(13), 7);
-        assert_eq!(base(14), 7);
     }
 
     struct TreeBuilder;
