@@ -8,6 +8,7 @@ use std::ops::Range;
 use std::result;
 use tracing::{instrument, warn};
 
+type Data<B> = <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType;
 type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 /// MerkleTree.
@@ -15,9 +16,9 @@ type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub struct MerkleTree<B>
 where
     B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
-    tree: Vec<Node<B>>,
+    data: Vec<NodeData<B>>,
     tree_depth: usize,
     leaf_start: usize,
 }
@@ -25,7 +26,7 @@ where
 impl<B> MerkleTree<B>
 where
     B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     /// I'm not convinced with the name of this function, because
     /// giving two parameters a bit confusing.  But also, the previous
@@ -37,12 +38,13 @@ where
         let mut tree = Self::with_depth(depth);
 
         // set the leaf node first with the provided hash.
-        let mut node = Node::try_from(hash)?;
+        let mut node = NodeData::try_from(hash)?;
         tree.leaves_mut().for_each(|leaf| *leaf = node.clone());
 
         // then calculate the merkle root.
         for depth in (1..depth).rev() {
-            let parent = Node::from(B::new().chain_update(&node).chain_update(&node).finalize());
+            let parent =
+                NodeData::from(B::new().chain_update(&node).chain_update(&node).finalize());
             tree.try_nodes_in_depth_mut(depth)
                 .unwrap()
                 .for_each(|node| *node = parent.clone());
@@ -52,21 +54,21 @@ where
     }
 
     pub fn len(&self) -> usize {
-        self.tree.len()
+        self.data.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tree.len() == 0
+        self.data.len() == 0
     }
 
     /// Panic when called on the empty tree.
     pub fn root(&self) -> &[u8] {
-        self.tree[0].as_ref()
+        self.data[0].as_ref()
     }
 
     /// Panic when called on the empty tree.
     pub fn leaves(&self) -> impl Iterator<Item = &[u8]> {
-        self.tree[self.leaf_start..]
+        self.data[self.leaf_start..]
             .iter()
             .map(|node| node.as_ref())
     }
@@ -81,7 +83,7 @@ where
             // no change.
             return Ok(());
         }
-        *node = Node::try_from(hash)?;
+        *node = NodeData::try_from(hash)?;
 
         // calculate the merkle root.
         for _ in self.merkle_root_iter(self.leaf_start + index) {}
@@ -123,27 +125,27 @@ where
             (1 << (tree_depth - 1)) - 1
         };
         Self {
-            tree: vec![Node::default(); tree_size],
+            data: vec![NodeData::default(); tree_size],
             tree_depth,
             leaf_start,
         }
     }
 
-    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut Node<B>> {
-        self.tree[self.leaf_start..].iter_mut()
+    fn leaves_mut(&mut self) -> impl Iterator<Item = &mut NodeData<B>> {
+        self.data[self.leaf_start..].iter_mut()
     }
 
     fn merkle_root_iter(&mut self, index: usize) -> MerkleRootIter<B> {
         let index = if index & 1 == 1 { index + 1 } else { index };
-        assert!(index < self.tree.len(), "invalid child index");
+        assert!(index < self.data.len(), "invalid child index");
         MerkleRootIter {
-            tree: &mut self.tree[..=index],
+            data: &mut self.data[..=index],
         }
     }
 
     fn proof_pair(&self, index: usize) -> Option<(Position, Output<B>)> {
         sibling(index)
-            .map(|sibling| (&self.tree[sibling]).into())
+            .map(|sibling| (&self.data[sibling]).into())
             .map(|hash| (Position::from(index), hash))
     }
 
@@ -164,9 +166,9 @@ where
     fn try_nodes_in_depth_mut(
         &mut self,
         depth: usize,
-    ) -> Result<impl Iterator<Item = &mut Node<B>>> {
+    ) -> Result<impl Iterator<Item = &mut NodeData<B>>> {
         let range = self.depth_range(depth).ok_or("invalid depth")?;
-        Ok(self.tree[range.start..range.end].iter_mut())
+        Ok(self.data[range.start..range.end].iter_mut())
     }
 
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
@@ -177,7 +179,7 @@ where
             }
             0 => Some(Range {
                 start: 0,
-                end: self.tree.len(),
+                end: self.data.len(),
             }),
             _ => {
                 let start = (1 << (depth - 1)) - 1;
@@ -188,41 +190,41 @@ where
     }
 }
 
-/// Merkle tree node.
+/// Merkle tree node data.
 ///
 /// It provides the convenient way to access the actual hash value
 /// through the deref method.  The node is always initialized,
 /// e.g., Some(Output<B>) by MerkleTree type.
 #[derive(Copy, Debug)]
-struct Node<B>(Option<Output<B>>)
+struct NodeData<B>(Option<Output<B>>)
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy;
+    Data<B>: Copy;
 
-impl<B> Clone for Node<B>
+impl<B> Clone for NodeData<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<B> Default for Node<B>
+impl<B> Default for NodeData<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     fn default() -> Self {
         Self(None)
     }
 }
 
-impl<B> AsRef<[u8]> for Node<B>
+impl<B> AsRef<[u8]> for NodeData<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     fn as_ref(&self) -> &[u8] {
         assert!(self.0.is_some(), "accessing uninitialized node");
@@ -230,10 +232,10 @@ where
     }
 }
 
-impl<B> TryFrom<&[u8]> for Node<B>
+impl<B> TryFrom<&[u8]> for NodeData<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     type Error = &'static str;
 
@@ -245,21 +247,21 @@ where
     }
 }
 
-impl<B> From<&Node<B>> for Output<B>
+impl<B> From<&NodeData<B>> for Output<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
-    fn from(node: &Node<B>) -> Output<B> {
+    fn from(node: &NodeData<B>) -> Output<B> {
         assert!(node.0.is_some(), "accessing uninitialized node");
         node.0.unwrap()
     }
 }
 
-impl<B> From<Output<B>> for Node<B>
+impl<B> From<Output<B>> for NodeData<B>
 where
     B: Debug + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     fn from(inner: Output<B>) -> Self {
         Self(Some(inner))
@@ -269,40 +271,40 @@ where
 struct MerkleRootIter<'a, B>
 where
     B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
-    tree: &'a mut [Node<B>],
+    data: &'a mut [NodeData<B>],
 }
 
 impl<'a, B> Iterator for MerkleRootIter<'a, B>
 where
     B: Debug + Digest + OutputSizeUser,
-    <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType: Copy,
+    Data<B>: Copy,
 {
     type Item = Output<B>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.tree.is_empty() {
+        if self.data.is_empty() {
             return None;
         }
 
         // get the left and right child.
-        assert!(self.tree.len() >= 3, "invalid index calculation");
-        let (right, tree) = mem::take(&mut self.tree).split_last_mut().unwrap();
-        let (left, tree) = tree.split_last_mut().unwrap();
+        assert!(self.data.len() >= 3, "invalid index calculation");
+        let (right, data) = mem::take(&mut self.data).split_last_mut().unwrap();
+        let (left, data) = data.split_last_mut().unwrap();
 
         // calculate the parent hash.
-        let parent_index = (tree.len() - 1) / 2;
+        let parent_index = (data.len() - 1) / 2;
         let hash = B::new().chain_update(&left).chain_update(&right).finalize();
-        tree[parent_index] = Node::from(hash);
+        data[parent_index] = NodeData::from(hash);
 
-        // update the tree in the iterator.
-        self.tree = if parent_index == 0 {
+        // update the data in the iterator.
+        self.data = if parent_index == 0 {
             &mut []
         } else if parent_index & 1 == 1 {
-            &mut tree[..=parent_index + 1]
+            &mut data[..=parent_index + 1]
         } else {
-            &mut tree[..=parent_index]
+            &mut data[..=parent_index]
         };
 
         Some(hash)
