@@ -1,6 +1,6 @@
 //! MarkelTree
 use digest::{Digest, Output, OutputSizeUser};
-use generic_array::ArrayLength;
+use generic_array::{ArrayLength, GenericArray};
 use std::error::Error;
 use std::fmt::Debug;
 use std::io;
@@ -73,8 +73,8 @@ where
     }
 
     #[instrument(name = "MerkleTree::set", skip(self), err)]
-    pub fn set(&mut self, leaf_offset: usize, hash: &[u8]) -> Result<()> {
-        let node = self.try_leaf_mut(leaf_offset)?;
+    pub fn set(&mut self, index: usize, hash: &[u8]) -> Result<()> {
+        let node = self.try_leaf_mut(index)?;
         if node.as_ref() == hash {
             // no change.
             return Ok(());
@@ -82,14 +82,14 @@ where
         *node = NodeData::try_from(hash)?;
 
         // calculate the merkle root.
-        for _ in self.parent_hash_iter_mut(self.leaf_start + leaf_offset) {}
+        for _ in self.parent_hash_iter_mut(self.leaf_start + index) {}
 
         Ok(())
     }
 
-    pub fn proof(&self, leaf_offset: usize) -> Result<MerkleProofIter<B>> {
-        let _node = self.try_leaf(leaf_offset)?;
-        Ok(self.merkle_proof_iter(self.leaf_start + leaf_offset))
+    pub fn proof(&self, index: usize) -> Result<MerkleProofIter<B>> {
+        let _node = self.try_leaf(index)?;
+        Ok(self.merkle_proof_iter(self.leaf_start + index))
     }
 
     // Make this associated function private, as it doesn't completely
@@ -193,6 +193,40 @@ where
 {
     index: usize,
     data: &'a [NodeData<B>],
+}
+
+impl<'a, B> MerkleProofIter<'a, B>
+where
+    B: Debug + Digest + OutputSizeUser,
+    Data<B>: Copy,
+{
+    pub fn verify<T>(self, leaf: T) -> Output<B>
+    where
+        T: AsRef<[u8]>,
+    {
+        let mut data: Output<B> = GenericArray::default();
+        let mut hash = leaf.as_ref();
+
+        for proof in self {
+            match proof.kind() {
+                MerkleNodeKind::Left => {
+                    B::new()
+                        .chain_update(hash)
+                        .chain_update(proof.sibling_data().unwrap())
+                        .finalize_into(&mut data);
+                }
+                MerkleNodeKind::Right => {
+                    B::new()
+                        .chain_update(proof.sibling_data().unwrap())
+                        .chain_update(hash)
+                        .finalize_into(&mut data);
+                }
+                MerkleNodeKind::Root => panic!("invalid proof node"),
+            }
+            hash = data.as_ref()
+        }
+        data
+    }
 }
 
 impl<'a, B> Iterator for MerkleProofIter<'a, B>
@@ -423,6 +457,15 @@ mod tests {
     use super::{MerkleNodeKind, MerkleTree};
     use hex_literal::hex;
     use sha3::Sha3_256;
+
+    #[test]
+    fn tree_verify() {
+        let tree = TreeBuilder::build(5);
+        let want = hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
+
+        let got = tree.proof(3).unwrap().verify(&[0x33; 32]);
+        assert_eq!(got, want.into());
+    }
 
     #[test]
     fn tree_proof() {
