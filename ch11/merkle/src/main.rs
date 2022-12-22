@@ -49,4 +49,9 @@ fn set_leaves(depth: usize) {
 
     // print out the root.
     info!("tree.node={:02x?}", tree.root());
+
+    // print out the merkle proof
+    for proof in tree.proof(0).unwrap() {
+        info!("proof={:?}", proof);
+    }
 }

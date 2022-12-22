@@ -1,22 +1,19 @@
 //! MarkelTree
 use digest::{Digest, Output, OutputSizeUser};
 use generic_array::{ArrayLength, GenericArray};
-use std::error::Error;
-use std::fmt::Debug;
-use std::io;
+use std::fmt::{self, Debug};
+use std::io::{self, Result};
 use std::mem;
-use std::ops::Range;
-use std::result;
-use tracing::{instrument, warn};
+use std::ops::{Deref, Range};
+use tracing::instrument;
 
 type Data<B> = <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType;
-type Result<T> = result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 /// MerkleTree.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MerkleTree<B>
 where
-    B: Debug + Digest,
+    B: Digest,
     Data<B>: Copy,
 {
     data: Vec<NodeData<B>>,
@@ -26,7 +23,7 @@ where
 
 impl<B> MerkleTree<B>
 where
-    B: Debug + Digest,
+    B: Digest,
     Data<B>: Copy,
 {
     /// I'm not convinced with the name of this function, because
@@ -87,9 +84,10 @@ where
         Ok(())
     }
 
-    pub fn proof(&self, index: usize) -> Result<MerkleProofIter<B>> {
+    #[instrument(name = "MerkleTree::proof", skip(self), err)]
+    pub fn proof(&self, index: usize) -> Result<MerkleProof<B>> {
         let _node = self.try_leaf(index)?;
-        Ok(self.merkle_proof_iter(self.leaf_start + index))
+        Ok(self.proof_iter(self.leaf_start + index).into())
     }
 
     // Make this associated function private, as it doesn't completely
@@ -120,7 +118,6 @@ where
                 io::ErrorKind::InvalidInput,
                 format!("invalid leaf index: {index}"),
             )
-            .into()
         })
     }
 
@@ -130,7 +127,6 @@ where
                 io::ErrorKind::InvalidInput,
                 format!("invalid leaf index: {index}"),
             )
-            .into()
         })
     }
 
@@ -150,8 +146,8 @@ where
         }
     }
 
-    fn merkle_proof_iter(&self, index: usize) -> MerkleProofIter<B> {
-        MerkleProofIter {
+    fn proof_iter(&self, index: usize) -> ProofIter<B> {
+        ProofIter {
             index,
             data: &self.data,
         }
@@ -161,16 +157,18 @@ where
         &mut self,
         depth: usize,
     ) -> Result<impl Iterator<Item = &mut NodeData<B>>> {
-        let range = self.depth_range(depth).ok_or("invalid depth")?;
+        let range = self.depth_range(depth).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid depth: {depth}"),
+            )
+        })?;
         Ok(self.data[range.start..range.end].iter_mut())
     }
 
     fn depth_range(&self, depth: usize) -> Option<Range<usize>> {
         match depth {
-            depth if depth > self.tree_depth => {
-                warn!(tree.depth = %self.tree_depth, "invalid depth");
-                None
-            }
+            depth if depth > self.tree_depth => None,
             0 => Some(Range {
                 start: 0,
                 end: self.data.len(),
@@ -184,44 +182,41 @@ where
     }
 }
 
-/// MerkleProofIter for the merkle proof.
+/// MerkleProof type to be returned by the MerkleTree::proof function.
 #[derive(Debug)]
-pub struct MerkleProofIter<'a, B>
+pub struct MerkleProof<B>(Vec<MerkleProofData<B>>)
 where
-    B: Debug + OutputSizeUser,
-    Data<B>: Copy,
-{
-    index: usize,
-    data: &'a [NodeData<B>],
-}
+    B: OutputSizeUser;
 
-impl<'a, B> MerkleProofIter<'a, B>
+impl<B> MerkleProof<B>
 where
-    B: Debug + Digest,
-    Data<B>: Copy,
+    B: Digest,
 {
-    pub fn verify<T>(self, leaf: T) -> Output<B>
+    pub fn iter(&self) -> impl Iterator<Item = &MerkleProofData<B>> {
+        self.0.iter()
+    }
+
+    pub fn verify<T>(&self, leaf: T) -> Output<B>
     where
         T: AsRef<[u8]>,
     {
         let mut data: Output<B> = GenericArray::default();
         let mut hash = leaf.as_ref();
 
-        for proof in self {
+        for proof in &self.0 {
             match proof.kind() {
-                MerkleNodeKind::Left => {
+                MerkleProofDataKind::Left => {
                     B::new()
                         .chain_update(hash)
-                        .chain_update(proof.sibling_data().unwrap())
+                        .chain_update(proof.sibling())
                         .finalize_into(&mut data);
                 }
-                MerkleNodeKind::Right => {
+                MerkleProofDataKind::Right => {
                     B::new()
-                        .chain_update(proof.sibling_data().unwrap())
+                        .chain_update(proof.sibling())
                         .chain_update(hash)
                         .finalize_into(&mut data);
                 }
-                MerkleNodeKind::Root => panic!("invalid proof node"),
             }
             hash = data.as_ref()
         }
@@ -229,33 +224,122 @@ where
     }
 }
 
-impl<'a, B> Iterator for MerkleProofIter<'a, B>
+impl<B> Deref for MerkleProof<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
+{
+    type Target = [MerkleProofData<B>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a, B> IntoIterator for &'a MerkleProof<B>
+where
+    B: OutputSizeUser,
+{
+    type Item = &'a MerkleProofData<B>;
+    type IntoIter = std::slice::Iter<'a, MerkleProofData<B>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0[..].iter()
+    }
+}
+
+impl<B> IntoIterator for MerkleProof<B>
+where
+    B: OutputSizeUser,
+{
+    type Item = MerkleProofData<B>;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, B> From<ProofIter<'a, B>> for MerkleProof<B>
+where
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
-    type Item = MerkleNode<'a, B>;
+    fn from(iter: ProofIter<'a, B>) -> Self {
+        Self(iter.collect())
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MerkleProofDataKind {
+    Left,
+    Right,
+}
+
+/// MerkleProofData for the merkle proof.
+pub struct MerkleProofData<B>(MerkleProofDataKind, Output<B>)
+where
+    B: OutputSizeUser;
+
+impl<B> MerkleProofData<B>
+where
+    B: OutputSizeUser,
+{
+    pub fn kind(&self) -> MerkleProofDataKind {
+        self.0
+    }
+
+    pub fn sibling(&self) -> &[u8] {
+        self.1.as_ref()
+    }
+}
+
+impl<B> Debug for MerkleProofData<B>
+where
+    B: OutputSizeUser,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MerkleProofData")
+            .field("kind", &self.0)
+            .field("sibling", &format_args!("{:02x?}", self.1.as_ref()))
+            .finish()
+    }
+}
+
+/// ProofIter for the merkle proof creation.
+#[derive(Debug)]
+struct ProofIter<'a, B>
+where
+    B: OutputSizeUser,
+    Data<B>: Copy,
+{
+    index: usize,
+    data: &'a [NodeData<B>],
+}
+
+impl<'a, B> Iterator for ProofIter<'a, B>
+where
+    B: OutputSizeUser,
+    Data<B>: Copy,
+{
+    type Item = MerkleProofData<B>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index == 0 {
             return None;
         }
-        let (kind, start, end) = if self.index & 1 == 1 {
-            (MerkleNodeKind::Left, self.index, self.index + 1)
+        let (kind, sibling) = if self.index & 1 == 1 {
+            (MerkleProofDataKind::Left, &self.data[self.index + 1])
         } else {
-            (MerkleNodeKind::Right, self.index - 1, self.index)
+            (MerkleProofDataKind::Right, &self.data[self.index - 1])
         };
         self.index = (self.index - 1) / 2;
-        Some(MerkleNode {
-            kind,
-            data: &self.data[start..=end],
-        })
+        Some(MerkleProofData(kind, sibling.into()))
     }
 }
 
 struct ParentHashIterMut<'a, B>
 where
-    B: Debug + Digest,
+    B: Digest,
     Data<B>: Copy,
 {
     data: &'a mut [NodeData<B>],
@@ -263,7 +347,7 @@ where
 
 impl<'a, B> Iterator for ParentHashIterMut<'a, B>
 where
-    B: Debug + Digest,
+    B: Digest,
     Data<B>: Copy,
 {
     type Item = Output<B>;
@@ -296,48 +380,6 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MerkleNodeKind {
-    Root,
-    Left,
-    Right,
-}
-
-#[derive(Debug)]
-pub struct MerkleNode<'a, B>
-where
-    B: Debug + OutputSizeUser,
-    Data<B>: Copy,
-{
-    kind: MerkleNodeKind,
-    data: &'a [NodeData<B>],
-}
-
-impl<'a, B> MerkleNode<'a, B>
-where
-    B: Debug + OutputSizeUser,
-    Data<B>: Copy,
-{
-    pub fn kind(&self) -> MerkleNodeKind {
-        self.kind
-    }
-
-    pub fn data(&self) -> &[u8] {
-        match self.kind {
-            MerkleNodeKind::Root | MerkleNodeKind::Left => self.data[0].as_ref(),
-            MerkleNodeKind::Right => self.data[1].as_ref(),
-        }
-    }
-
-    pub fn sibling_data(&self) -> Option<&[u8]> {
-        match self.kind {
-            MerkleNodeKind::Root => None,
-            MerkleNodeKind::Left => Some(self.data[1].as_ref()),
-            MerkleNodeKind::Right => Some(self.data[0].as_ref()),
-        }
-    }
-}
-
 /// Merkle tree node data.
 ///
 /// It provides the convenient way to access the actual hash value
@@ -346,15 +388,15 @@ where
 ///
 /// It's a private type to provide AsRef<[u8]> to the actual
 /// data.
-#[derive(Copy, Debug)]
+#[derive(Copy)]
 struct NodeData<B>(Option<Output<B>>)
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy;
 
 impl<B> Clone for NodeData<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
     fn clone(&self) -> Self {
@@ -364,7 +406,7 @@ where
 
 impl<B> Default for NodeData<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
     fn default() -> Self {
@@ -372,9 +414,24 @@ where
     }
 }
 
+impl<B> Debug for NodeData<B>
+where
+    B: OutputSizeUser,
+    Data<B>: Copy,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut f = f.debug_struct("NodeData");
+        match self.0 {
+            Some(data) => f.field("data", &format_args!("{:02x?}", data.as_ref())),
+            None => f.field("data", &"uninitialized"),
+        }
+        .finish()
+    }
+}
+
 impl<B> AsRef<[u8]> for NodeData<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
     fn as_ref(&self) -> &[u8] {
@@ -385,22 +442,30 @@ where
 
 impl<B> TryFrom<&[u8]> for NodeData<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
-    type Error = &'static str;
+    type Error = io::Error;
 
-    fn try_from(slice: &[u8]) -> result::Result<Self, Self::Error> {
+    fn try_from(slice: &[u8]) -> Result<Self> {
         if slice.len() != B::output_size() {
-            return Err("invalid slice length");
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid slice length: {}!={}",
+                    slice.len(),
+                    B::output_size()
+                ),
+            ))
+        } else {
+            Ok(Self(Some(Output::<B>::clone_from_slice(slice))))
         }
-        Ok(Self(Some(Output::<B>::clone_from_slice(slice))))
     }
 }
 
 impl<B> From<&NodeData<B>> for Output<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
     fn from(node: &NodeData<B>) -> Output<B> {
@@ -411,7 +476,7 @@ where
 
 impl<B> From<Output<B>> for NodeData<B>
 where
-    B: Debug + OutputSizeUser,
+    B: OutputSizeUser,
     Data<B>: Copy,
 {
     fn from(inner: Output<B>) -> Self {
@@ -421,12 +486,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{MerkleNodeKind, MerkleTree};
+    use super::{MerkleProofDataKind, MerkleTree};
     use hex_literal::hex;
     use sha3::Sha3_256;
 
     #[test]
-    fn tree_verify() {
+    fn tree_proof_verify() {
         let tree = TreeBuilder::build(5);
         let want = hex!("57054e43fa56333fd51343b09460d48b9204999c376624f52480c5593b91eff4");
 
@@ -438,23 +503,23 @@ mod tests {
     fn tree_proof() {
         let tree = TreeBuilder::build(5);
 
-        let got: Vec<_> = tree.proof(3).unwrap().collect();
+        let got = tree.proof(3).unwrap();
         assert_eq!(got.len(), 4);
-        assert_eq!(got[0].kind(), MerkleNodeKind::Right);
-        assert_eq!(got[0].sibling_data().unwrap(), &[0x22; 32]);
-        assert_eq!(got[1].kind(), MerkleNodeKind::Right);
+        assert_eq!(got[0].kind(), MerkleProofDataKind::Right);
+        assert_eq!(got[0].sibling(), &[0x22; 32]);
+        assert_eq!(got[1].kind(), MerkleProofDataKind::Right);
         assert_eq!(
-            got[1].sibling_data().unwrap(),
+            got[1].sibling(),
             hex!("35e794f1b42c224a8e390ce37e141a8d74aa53e151c1d1b9a03f88c65adb9e10"),
         );
-        assert_eq!(got[2].kind(), MerkleNodeKind::Left);
+        assert_eq!(got[2].kind(), MerkleProofDataKind::Left);
         assert_eq!(
-            got[2].sibling_data().unwrap(),
+            got[2].sibling(),
             hex!("26fca7737f48fa702664c8b468e34c858e62f51762386bd0bddaa7050e0dd7c0"),
         );
-        assert_eq!(got[3].kind(), MerkleNodeKind::Left);
+        assert_eq!(got[3].kind(), MerkleProofDataKind::Left);
         assert_eq!(
-            got[3].sibling_data().unwrap(),
+            got[3].sibling(),
             hex!("e7e11a86a0c1d8d8624b1629cb58e39bb4d0364cb8cb33c4029662ab30336858"),
         );
     }
