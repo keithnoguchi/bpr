@@ -47,20 +47,10 @@ where
         Ok(tree)
     }
 
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.len() == 0
-    }
-
-    /// Panic when called on the empty tree.
     pub fn root(&self) -> &[u8] {
         self.data[0].as_ref()
     }
 
-    /// Panic when called on the empty tree.
     pub fn leaves(&self) -> impl Iterator<Item = &[u8]> {
         self.leaves_iter().map(|node| node.as_ref())
     }
@@ -90,21 +80,10 @@ where
         Ok(self.proof_iter(self.leaf_start + index).into())
     }
 
-    // Make this associated function private, as it doesn't completely
-    // initialize the table.  For example, the following code will panic:
-    //
-    // ```
-    // let mut table = MerkleTree::with_depth(20);
-    //
-    // table.set(0, [11u8; 32]);
-    // ```
-    fn with_depth(tree_depth: usize) -> Self {
-        let tree_size = (1 << tree_depth) - 1;
-        let leaf_start = if tree_depth == 0 {
-            0
-        } else {
-            (1 << (tree_depth - 1)) - 1
-        };
+    fn with_depth(depth: usize) -> Self {
+        assert!(depth != 0, "zero depth tree is not supported");
+        let tree_size = (1 << depth) - 1;
+        let leaf_start = (1 << (depth - 1)) - 1;
         Self {
             data: vec![NodeData::default(); tree_size],
             leaf_start,
@@ -512,15 +491,6 @@ mod tests {
             .collect();
         let tree = MerkleTree::<Sha3_256>::with_leaves(leaves).unwrap();
         assert_eq!(tree.root(), &SAMPLE_ROOT);
-    }
-
-    #[test]
-    fn tree_len() {
-        assert_eq!(MerkleTree::<Sha3_256>::with_depth(0).len(), 0);
-        for depth in 1..=10 {
-            let want = (1 << depth) - 1;
-            assert_eq!(MerkleTree::<Sha3_256>::with_depth(depth).len(), want);
-        }
     }
 
     #[test]
