@@ -2,21 +2,20 @@
 use merkle::MerkleTree;
 use sha3::Sha3_256;
 use std::str::FromStr;
-use tracing::{info, instrument, warn};
 
-const NR_DEPTH: usize = 20;
-const NR_ZERO_HASH: [u8; 32] = [0; 32];
-const NR_LEAF_HASH: [u8; 32] = [0xab; 32];
+const NR_DEPTH: usize = 12;
 
 fn main() {
-    tracing_subscriber::fmt::init();
     let depth = std::env::args()
         .nth(1)
         .as_ref()
         .and_then(|v| usize::from_str(v).ok())
         .unwrap_or(NR_DEPTH);
 
-    let tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &NR_LEAF_HASH).unwrap();
+    let leaves: Vec<_> = std::iter::repeat([0xabu8; 32])
+        .take(1 << (depth - 1))
+        .collect();
+    let tree = MerkleTree::<Sha3_256>::with_leaves(leaves).unwrap();
     for (i, leave) in tree.leaves().take(4).enumerate() {
         println!("leaf[{i}]={:02x?}", leave);
     }
@@ -27,31 +26,18 @@ fn main() {
     println!("tree.root.len={}", root.len());
     println!("tree.root={:02x?}", root);
 
-    if depth < 6 {
-        set_leaves(depth)
+    // merkle proof and verification.
+    println!("create merkle tree for {} leaves", 1 << (depth - 1));
+    let mut leaves = vec![];
+    for i in 0..1 << (depth - 1) {
+        let hash = [i as u8; 32];
+        leaves.push(hash);
     }
-}
+    let tree = MerkleTree::<Sha3_256>::with_leaves(leaves).unwrap();
 
-#[instrument]
-fn set_leaves(depth: usize) {
-    let mut tree = MerkleTree::<Sha3_256>::with_depth_and_leaf(depth, &NR_ZERO_HASH).unwrap();
-
-    // set the leaves.
-    for i in 0..tree.leaves().count() {
-        let hash = [0x11u8 * i as u8; 32];
-        tree.set(i, &hash).unwrap();
-    }
-
-    // print out the leaves.
+    println!("verify merkle proof for {} leaves", 1 << (depth - 1));
     for (i, leaf) in tree.leaves().enumerate() {
-        info!("leaf[{i}]={:02x?}", leaf)
-    }
-
-    // print out the root.
-    info!("tree.node={:02x?}", tree.root());
-
-    // print out the merkle proof
-    for proof in tree.proof(0).unwrap() {
-        info!("proof={:?}", proof);
+        let proof = tree.proof(i).unwrap();
+        assert_eq!(AsRef::<[u8]>::as_ref(&proof.verify(leaf)), tree.root());
     }
 }
