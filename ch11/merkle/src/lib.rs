@@ -478,14 +478,31 @@ mod tests {
     }
 
     #[test]
-    fn tree_root() {
+    fn tree_root_depth_1() {
+        const SAMPLE_LEAF: [u8; 32] = [0xabu8; 32];
+        let tree = MerkleTree::<Sha3_256>::with_leaves([SAMPLE_LEAF]).unwrap();
+        assert_eq!(tree.root(), &SAMPLE_LEAF);
+    }
+
+    #[test]
+    fn tree_root_depth_15() {
         const SAMPLE_LEAF: [u8; 32] = [0xabu8; 32];
         const SAMPLE_ROOT: [u8; 32] =
             hex!("44ad1490179db284f6fa21d8effbd1ba6a3028042b96be9b249f538de3f57a85");
-
-        let tree = MerkleTree::<Sha3_256>::with_leaves([SAMPLE_LEAF]).unwrap();
-        assert_eq!(tree.root(), &SAMPLE_LEAF);
         let depth = 15;
+        let leaves: Vec<_> = std::iter::repeat(SAMPLE_LEAF)
+            .take(1 << (depth - 1))
+            .collect();
+        let tree = MerkleTree::<Sha3_256>::with_leaves(leaves).unwrap();
+        assert_eq!(tree.root(), &SAMPLE_ROOT);
+    }
+
+    #[test]
+    fn tree_root_depth_20() {
+        const SAMPLE_LEAF: [u8; 32] = [0xabu8; 32];
+        const SAMPLE_ROOT: [u8; 32] =
+            hex!("d4490f4d374ca8a44685fe9471c5b8dbe58cdffd13d30d9aba15dd29efb92930");
+        let depth = 20;
         let leaves: Vec<_> = std::iter::repeat(SAMPLE_LEAF)
             .take(1 << (depth - 1))
             .collect();
