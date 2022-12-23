@@ -53,7 +53,7 @@ fn main() {
             spawner.spawn(move |_| {
                 for (i, leaf) in leaves_chunk {
                     let proof = tree.proof(*i).unwrap();
-                    assert_eq!(AsRef::<[u8]>::as_ref(&proof.verify(leaf)), tree.root());
+                    assert_eq!(proof.verify(leaf).as_ref(), tree.root());
                 }
             });
         }

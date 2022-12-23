@@ -145,7 +145,7 @@ where
         self.0.iter()
     }
 
-    pub fn verify<T>(&self, leaf: T) -> Output<B>
+    pub fn verify<T>(&self, leaf: T) -> impl AsRef<[u8]>
     where
         T: AsRef<[u8]>,
     {
