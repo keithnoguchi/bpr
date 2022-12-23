@@ -7,7 +7,7 @@ authors = ["Keith Noguchi <hack@noguchi.us>"]
 [dependencies]
 generic-array = "0.14"
 digest = "0.10"
+
+[dev-dependencies]
 sha3 = "0.10"
 hex-literal = "0.3"
-tracing = { version = "0.1", features = ["attributes"] }
-tracing-subscriber = "0.3"

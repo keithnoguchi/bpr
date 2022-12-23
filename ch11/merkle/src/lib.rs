@@ -5,7 +5,6 @@ use std::fmt::{self, Debug};
 use std::io::{self, Result};
 use std::mem;
 use std::ops::{Deref, Range};
-use tracing::instrument;
 
 type Data<B> = <<B as OutputSizeUser>::OutputSize as ArrayLength<u8>>::ArrayType;
 
@@ -66,7 +65,6 @@ where
         self.leaves_iter().map(|node| node.as_ref())
     }
 
-    #[instrument(name = "MerkleTree::set", skip(self), err)]
     pub fn set(&mut self, index: usize, hash: &[u8]) -> Result<()> {
         let node = self.try_leaf_mut(index)?;
         if let Some(inner) = node.0 {
@@ -87,7 +85,6 @@ where
         Ok(())
     }
 
-    #[instrument(name = "MerkleTree::proof", skip(self), err)]
     pub fn proof(&self, index: usize) -> Result<MerkleProof<B>> {
         let _node = self.try_leaf(index)?;
         Ok(self.proof_iter(self.leaf_start + index).into())
