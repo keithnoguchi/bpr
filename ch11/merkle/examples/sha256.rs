@@ -20,10 +20,9 @@ fn main() {
         .and_then(|v| usize::from_str(v).ok())
         .unwrap_or(NR_VERIFIERS);
 
-    let leaves: Vec<_> = std::iter::repeat([0xabu8; 32])
+    let tree: MerkleTree<Sha3_256> = std::iter::repeat([0xabu8; 32])
         .take(1 << (nr_depth - 1))
         .collect();
-    let tree = MerkleTree::<Sha3_256>::with_leaves(leaves).unwrap();
     for (i, leave) in tree.leaves().take(4).enumerate() {
         println!("leaf[{i}]={:02x?}", leave);
     }
@@ -38,10 +37,9 @@ fn main() {
     println!("create merkle tree for {} leaves", 1 << (nr_depth - 1));
     let mut leaves = vec![];
     for i in 0..1 << (nr_depth - 1) {
-        let hash = [i as u8; 32];
-        leaves.push(hash);
+        leaves.push([i as u8; 32])
     }
-    let tree0 = Arc::new(MerkleTree::<Sha3_256>::with_leaves(&leaves).unwrap());
+    let tree0: Arc<MerkleTree<Sha3_256>> = Arc::new(leaves.iter().collect());
 
     println!("verify merkle proof for {} leaves", 1 << (nr_depth - 1));
     let chunk = leaves.len() / nr_verifiers;
