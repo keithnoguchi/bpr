@@ -176,14 +176,16 @@ where
 }
 
 /// MerkleProof type to be returned by the MerkleTree::proof function.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MerkleProof<B>(Vec<MerkleProofData<B>>)
 where
-    B: OutputSizeUser;
+    B: OutputSizeUser,
+    Data<B>: Copy;
 
 impl<B> MerkleProof<B>
 where
     B: Digest,
+    Data<B>: Copy,
 {
     pub fn iter(&self) -> impl Iterator<Item = &MerkleProofData<B>> {
         self.0.iter()
@@ -220,6 +222,7 @@ where
 impl<B> Deref for MerkleProof<B>
 where
     B: OutputSizeUser,
+    Data<B>: Copy,
 {
     type Target = [MerkleProofData<B>];
 
@@ -231,6 +234,7 @@ where
 impl<'a, B> IntoIterator for &'a MerkleProof<B>
 where
     B: OutputSizeUser,
+    Data<B>: Copy,
 {
     type Item = &'a MerkleProofData<B>;
     type IntoIter = std::slice::Iter<'a, MerkleProofData<B>>;
@@ -243,6 +247,7 @@ where
 impl<B> IntoIterator for MerkleProof<B>
 where
     B: OutputSizeUser,
+    Data<B>: Copy,
 {
     type Item = MerkleProofData<B>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
@@ -269,18 +274,23 @@ pub enum MerkleProofDataKind {
 }
 
 /// MerkleProofData for the merkle proof.
+#[derive(Copy, Clone)]
 pub struct MerkleProofData<B>(MerkleProofDataKind, Output<B>)
 where
-    B: OutputSizeUser;
+    B: OutputSizeUser,
+    Data<B>: Copy;
 
 impl<B> MerkleProofData<B>
 where
     B: OutputSizeUser,
+    Data<B>: Copy,
 {
+    #[inline]
     pub fn kind(&self) -> MerkleProofDataKind {
         self.0
     }
 
+    #[inline]
     pub fn sibling(&self) -> &[u8] {
         self.1.as_ref()
     }
@@ -289,6 +299,7 @@ where
 impl<B> Debug for MerkleProofData<B>
 where
     B: OutputSizeUser,
+    Data<B>: Copy,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MerkleProofData")
