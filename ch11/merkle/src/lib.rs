@@ -20,15 +20,15 @@ where
     leaf_start: usize,
 }
 
-impl<B, I> FromIterator<I> for MerkleTree<B>
+impl<B, D> FromIterator<D> for MerkleTree<B>
 where
     B: Digest,
     Data<B>: Copy,
-    I: AsRef<[u8]>,
+    D: AsRef<[u8]>,
 {
     fn from_iter<T>(iter: T) -> Self
     where
-        T: IntoIterator<Item = I>,
+        T: IntoIterator<Item = D>,
     {
         // assuming size_hint() returns the correct length for now.
         let iter = iter.into_iter();
