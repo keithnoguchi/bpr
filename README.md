@@ -18,23 +18,12 @@ Let's first go over the primitives with [Jimmy Song]'s wonderful
 
 ## Setup
 
-### Solana
+### Solana Localhost Blockchain Cluster
 
-As in [Solana CLI] documentation:
-```
-$ sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
-```
+Let's run the local cluster by following the [solana local development]
+document.
 
-The above script will update the `$PATH` environment variable.
-```
-$ . ~/.profile
-```
-
-Double check if you have `solana` in your environment:
-```
-$ solana --version
-solana-cli 1.13.5 (src:959b760c; feat:1365939126)
-```
+[solana local development]: https://docs.solana.com/getstarted/local
 
 ### Solana Program Libray (SPL)
 
@@ -59,11 +48,6 @@ anchor-cli 0.25.0
 ### Airdrop on Wallet
 
 Let's create a command line wallet for testing:
-
-```
-$ solana-keygen new
-```
-and then, airdrop 2 SOL to your wallet on `devnet`:
 
 ```
 $ solana airdrop 2 --url devnet $(solana-keygen pubkey)
