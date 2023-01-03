@@ -1,0 +1,11 @@
+{
+  "name": "token",
+  "version": "1.0.0",
+  "main": "main.js",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@solana/spl-token": "^0.3.6",
+    "@solana/web3.js": "^1.73.0"
+  }
+}

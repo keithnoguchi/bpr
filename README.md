@@ -12,6 +12,8 @@ Let's first go over the primitives with [Jimmy Song]'s wonderful
 
 ## Programs
 
+- [token](token)
+  - [createMint](token/001-createMint.js)
 - [Calculator](calc/programs/calc/src/lib.rs)
 - [Tic-Tac-Toe](t3/programs/t3/src/lib.rs)
   - Refer to [Anchor]'s [Tic-Tac-Toe Project].
@@ -69,6 +71,7 @@ Happy Hacking!
 [blockchain]: https://en.wikipedia.org/wiki/Blockchain
 [ehtereum]: https://ethereum.org/en/
 [cargo]: https://doc.rust-lang.org/cargo/commands/cargo-install.html
+[helloworld]: https://docs.solana.com/developing/on-chain-programs/examples#helloworld
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 [jimmy song]: https://programmingbitcoin.com/
 [programming bitcoin]: https://programmingbitcoin.com/programming-bitcoin-book/

@@ -1,4 +1,5 @@
 [workspace]
 members = [
+    "inc/programs/inc",
     "ch11/merkle",
 ]
