@@ -14,6 +14,7 @@ Let's first go over the primitives with [Jimmy Song]'s wonderful
 
 - [token](token)
   - [createMint](token/001-createMint.js)
+  - [createAccount](token/002-createAccount.js)
 - [Calculator](calc/programs/calc/src/lib.rs)
 - [Tic-Tac-Toe](t3/programs/t3/src/lib.rs)
   - Refer to [Anchor]'s [Tic-Tac-Toe Project].
