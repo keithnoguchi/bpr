@@ -31,10 +31,15 @@ async function main() {
   console.log("hello world!");
 
   const conn = await establishConnection("http://127.0.0.1:8899");
-  console.log("connection to cluster established", conn);
+  console.log("connection to cluster established on", conn.rpcEndpoint);
 
   const payer = await establishPayer(conn);
-  console.log("payer of this transaction, and rent", payer);
+  console.log("payer:", payer.publicKey.toBase58());
+
+  const programId = await getProgramId(
+    path.resolve(__dirname, "../../target/deploy/hello-keypair.json"),
+  );
+  console.log("programId:", programId.toBase58());
 }
 
 async function establishConnection(url: string): Promise<Connection> {
@@ -67,6 +72,18 @@ async function establishPayer(conn: Connection): Promise<Keypair> {
   console.log("total transaction fee", fees);
 
   return await getPayer();
+}
+
+async function getProgramId(filePath: string): Promise<PublicKey> {
+  try {
+    const programKeypair = await createKeypairFromFile(filePath);
+    return programKeypair.publicKey;
+  } catch (e) {
+    const errMsg = (e as Error).message;
+    throw new Error(
+      `Failed to read program keypair at '${filePath}' due to error: ${errMsg}.`,
+    );
+  }
 }
 
 async function getPayer(): Promise<Keypair> {
