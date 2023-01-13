@@ -1,5 +1,7 @@
 /**
- * Hello world
+ * Simplified [Hello world]
+ *
+ * [hello world]: https://github.com/solana-labs/example-helloworld/blob/master/src/client/hello_world.ts
  */
 import {
   Keypair,
@@ -11,10 +13,7 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-
-async function main() {
-  console.log("hello world!");
-}
+import * as borsh from "borsh";
 
 main().then(
   () => process.exit(),
@@ -23,3 +22,17 @@ main().then(
     process.exit(-1);
   },
 );
+
+async function main() {
+  console.log("hello world!");
+
+  const c = await establishConnection();
+}
+
+async function establishConnection() {
+  const url = "http://127.0.0.1:8899";
+  const c = new Connection(url, "confirmed");
+  const version = await c.getVersion();
+  console.log("connection to cluster established:", url, version);
+  return c
+}
