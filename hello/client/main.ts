@@ -1,8 +1,6 @@
-/**
- * Simplified [Hello world]
- *
- * [hello world]: https://github.com/solana-labs/example-helloworld/blob/master/src/client/hello_world.ts
- */
+// Simplified [Hello world]
+//
+// [hello world]: https://github.com/solana-labs/example-helloworld/blob/master/src/client/hello_world.ts
 import {
   Keypair,
   Connection,
@@ -30,20 +28,30 @@ main().then(
 async function main() {
   console.log("hello world!");
 
+  // Creates connection.
   const conn = await establishConnection("http://127.0.0.1:8899");
   console.log("connection to cluster established on", conn.rpcEndpoint);
 
+  // Get the payer for the transaction.
   const payer = await getPayer(conn);
   console.log("payer:", payer.publicKey.toBase58());
 
+  // get the program ID.
   const programId = await getProgramId(
     path.resolve(__dirname, "../../target/deploy/hello-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
 
+  // Check the program validity.
   if (await checkProgramInfo(conn, programId)) {
     console.log("program is loaded on-chain and is a valid executable");
   }
+
+  // Derive the address (public key) of a greeting data account from the
+  // program, so that it's easy to find later.
+  const GREETING_SEED = "hello";
+  const dataId = await getDataId(payer, GREETING_SEED, programId)
+  console.log("dataId:", dataId.toBase58());
 }
 
 async function establishConnection(url: string): Promise<Connection> {
@@ -98,6 +106,14 @@ async function checkProgramInfo(conn: Connection, programId: PublicKey): Promise
     throw new Error("Program is not executable");
   }
   return true;
+}
+
+async function getDataId(payer: Keypair, seed: string, programId: PublicKey): Promise<PublicKey> {
+  return await PublicKey.createWithSeed(
+    payer.publicKey,
+    seed,
+    programId,
+  );
 }
 
 async function parsePayer(): Promise<Keypair> {
