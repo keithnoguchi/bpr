@@ -33,20 +33,24 @@ async function main() {
   const conn = await establishConnection("http://127.0.0.1:8899");
   console.log("connection to cluster established on", conn.rpcEndpoint);
 
-  const payer = await establishPayer(conn);
+  const payer = await getPayer(conn);
   console.log("payer:", payer.publicKey.toBase58());
 
   const programId = await getProgramId(
     path.resolve(__dirname, "../../target/deploy/hello-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
+
+  if (await checkProgramInfo(conn, programId)) {
+    console.log("program is loaded on-chain and is a valid executable");
+  }
 }
 
 async function establishConnection(url: string): Promise<Connection> {
   return new Connection(url, "confirmed");
 }
 
-async function establishPayer(conn: Connection): Promise<Keypair> {
+async function getPayer(conn: Connection): Promise<Keypair> {
   class GreetingAccount {
     counter = 0;
     constructor(fields: {counter: number} | undefined = undefined) {
@@ -71,7 +75,7 @@ async function establishPayer(conn: Connection): Promise<Keypair> {
   fees += fee_for_one_signature; // just one signature.
   console.log("total transaction fee", fees);
 
-  return await getPayer();
+  return await parsePayer();
 }
 
 async function getProgramId(filePath: string): Promise<PublicKey> {
@@ -86,7 +90,17 @@ async function getProgramId(filePath: string): Promise<PublicKey> {
   }
 }
 
-async function getPayer(): Promise<Keypair> {
+async function checkProgramInfo(conn: Connection, programId: PublicKey): Promise<Boolean> {
+  const programInfo = await conn.getAccountInfo(programId);
+  if (programInfo === null) {
+    throw new Error("Program needs to be build and deployed");
+  } else if (!programInfo.executable) {
+    throw new Error("Program is not executable");
+  }
+  return true;
+}
+
+async function parsePayer(): Promise<Keypair> {
   try {
     const config = await getConfig();
     if (!config.keypair_path) throw new Error("Missing keypair path");
