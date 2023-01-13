@@ -26,13 +26,10 @@ main().then(
 async function main() {
   console.log("hello world!");
 
-  const c = await establishConnection();
+  const conn = await establishConnection("http://127.0.0.1:8899");
+  console.log("connection to cluster established", conn);
 }
 
-async function establishConnection() {
-  const url = "http://127.0.0.1:8899";
-  const c = new Connection(url, "confirmed");
-  const version = await c.getVersion();
-  console.log("connection to cluster established:", url, version);
-  return c
+async function establishConnection(url: string): Promise<Connection> {
+  return new Connection(url, "confirmed");
 }
