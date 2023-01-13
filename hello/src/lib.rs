@@ -79,11 +79,30 @@ mod tests {
         let instruction_data = Vec::<u8>::new();
         let accounts = vec![account];
 
+        // deserialization check.
         assert_eq!(
             Greeting::try_from_slice(&accounts[0].data.borrow())
                 .unwrap()
                 .counter,
             0,
+        );
+
+        // check if it increments the counter.
+        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        assert_eq!(
+            Greeting::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            1,
+        );
+
+        // once more.
+        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        assert_eq!(
+            Greeting::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            2,
         );
     }
 }
