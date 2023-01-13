@@ -4,9 +4,12 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "start": "ts-node main.ts"
+    "main": "ts-node main.ts"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.73.0"
+    "@solana/web3.js": "^1.73.0",
+    "@types/mz": "^2.7.4",
+    "mz": "^2.7.0",
+    "yaml": "^2.2.1"
   }
 }
