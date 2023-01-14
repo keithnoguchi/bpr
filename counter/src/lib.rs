@@ -1,4 +1,4 @@
-//! [Rust Program Quickstart]
+//! Counter program, as in [Rust Program Quickstart].
 //!
 //! [rust program quickstart]: https://docs.solana.com/getstarted/rust
 
@@ -14,7 +14,7 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
-/// On-chain counter account.
+/// On-chain counter data account.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct Counter {
     /// Number of greetings it received.

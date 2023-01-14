@@ -1,4 +1,4 @@
-// Simplified [Hello world]
+// Counter program: Simplified [Hello world]
 //
 // [hello world]: https://github.com/solana-labs/example-helloworld/blob/master/src/client/hello_world.ts
 import {
@@ -61,7 +61,7 @@ async function main() {
 
   // Gets the program ID.
   const programId = await getProgramId(
-    path.resolve(__dirname, "../../target/deploy/hello-keypair.json"),
+    path.resolve(__dirname, "../../target/deploy/counter-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
 

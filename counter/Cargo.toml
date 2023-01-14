@@ -1,5 +1,5 @@
 [package]
-name = "hello"
+name = "counter"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,5 +10,5 @@ borsh = "0.9.3"
 solana-program = "1.14.12"
 
 [lib]
-name = "hello"
+name = "counter"
 crate-type = ["cdylib", "lib"]

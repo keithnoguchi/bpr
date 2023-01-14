@@ -12,9 +12,12 @@ Let's first go over the primitives with [Jimmy Song]'s wonderful
 
 ## Programs
 
-- [hello](hello)
-  - [Hello World on Solana](https://github.com/solana-labs/example-helloworld)
-  - [Rust Program Quickstart Guide](https://docs.solana.com/getstarted/rust)
+[solana-program]: https://lib.rs/crates/solana-program
+
+- [Counter](counter)
+  - A counter program with [solana-program] crate directly.
+    - [Hello World on Solana](https://github.com/solana-labs/example-helloworld)
+    - [Rust Program Quickstart Guide](https://docs.solana.com/getstarted/rust)
 - [token](token)
   - [createMint](token/001-createMint.js)
   - [createAccount](token/002-createAccount.js)
