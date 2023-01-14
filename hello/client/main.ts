@@ -75,6 +75,11 @@ async function main() {
   const dataId = await getDataId(payer, DataAccount.SEED, programId)
   console.log("dataId:", dataId.toBase58());
 
+  // airdrop the payer in case there is not enough balance.
+  if (balance < fees) {
+    await airdropPayer(conn, payer, fees - balance);
+  }
+
   // Creates the data account if it's not there already.
   if (await checkDataAccount(conn, dataId)) {
     console.log("data account is on-chain");
@@ -153,6 +158,14 @@ async function checkDataAccount(conn: Connection, dataId: PublicKey): Promise<Bo
   } else {
     return true;
   }
+}
+
+async function airdropPayer(conn: Connection, payer: Keypair, amount: number) {
+  const sig = await conn.requestAirdrop(
+    payer.publicKey,
+    amount,
+  );
+  await conn.confirmTransaction(sig);
 }
 
 async function createDataAccount(
