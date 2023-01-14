@@ -43,7 +43,7 @@ async function main() {
   console.log("programId:", programId.toBase58());
 
   // Check the program validity.
-  if (await checkProgramInfo(conn, programId)) {
+  if (await checkProgramAccount(conn, programId)) {
     console.log("program is loaded on-chain and is a valid executable");
   }
 
@@ -52,6 +52,11 @@ async function main() {
   const GREETING_SEED = "hello";
   const dataId = await getDataId(payer, GREETING_SEED, programId)
   console.log("dataId:", dataId.toBase58());
+
+  // create an data account if it's not there.
+  if (!await checkDataAccount(conn, dataId)) {
+    console.log(`dataId(${dataId}) needed to be created`);
+  }
 }
 
 async function establishConnection(url: string): Promise<Connection> {
@@ -98,7 +103,7 @@ async function getProgramId(filePath: string): Promise<PublicKey> {
   }
 }
 
-async function checkProgramInfo(conn: Connection, programId: PublicKey): Promise<Boolean> {
+async function checkProgramAccount(conn: Connection, programId: PublicKey): Promise<Boolean> {
   const programInfo = await conn.getAccountInfo(programId);
   if (programInfo === null) {
     throw new Error("Program needs to be build and deployed");
@@ -114,6 +119,15 @@ async function getDataId(payer: Keypair, seed: string, programId: PublicKey): Pr
     seed,
     programId,
   );
+}
+
+async function checkDataAccount(conn: Connection, dataId: PublicKey): Promise<Boolean> {
+  const dataAccount = await conn.getAccountInfo(dataId);
+  if (dataAccount === null) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 async function parsePayer(): Promise<Keypair> {
