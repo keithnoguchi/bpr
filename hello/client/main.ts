@@ -17,21 +17,21 @@ import fs from "mz/fs";
 import path from "path";
 import yaml from "yaml";
 
-class DataAccount {
+class Counter {
   counter = 0;
   constructor(fields: {counter: number} | undefined = undefined) {
     if (fields) {
       this.counter = fields.counter;
     }
   }
-  static GreetingSchema = new Map([
-    [DataAccount, {kind: 'struct', fields: [['counter', 'u8']]}],
+  static SCHEMA = new Map([
+    [Counter, {kind: 'struct', fields: [['counter', 'u8']]}],
   ]);
   static SPACE = borsh.serialize(
-    DataAccount.GreetingSchema,
-    new DataAccount(),
+    Counter.SCHEMA,
+    new Counter(),
   ).length;
-  static SEED = "hello";
+  static SEED = "counter";
   static NUMBER_OF_SIGNATURES = 1;
 }
 
@@ -44,21 +44,19 @@ main().then(
 );
 
 async function main() {
-  console.log("hello world!");
-
   // Creates connection.
   const conn = await establishConnection("http://127.0.0.1:8899");
   console.debug("connection to cluster established on", conn.rpcEndpoint);
 
   // Gets the payer/player for the transaction.
-  const payer = await getPayer(conn, DataAccount.SPACE);
+  const payer = await getPayer(conn, Counter.SPACE);
   const balance = await conn.getBalance(payer.publicKey);
   console.log(`payer(${balance/LAMPORTS_PER_SOL} SOL):`,
               payer.publicKey.toBase58());
 
   // Get the fees for the data account creation + transaction.
-  const fees = await getFees(conn, DataAccount.SPACE,
-                             DataAccount.NUMBER_OF_SIGNATURES);
+  const fees = await getFees(conn, Counter.SPACE,
+                             Counter.NUMBER_OF_SIGNATURES);
   console.log(`required fee (rent + tx fee): ${fees/LAMPORTS_PER_SOL}`);
 
   // Gets the program ID.
@@ -71,9 +69,9 @@ async function main() {
   await checkProgramAccount(conn, programId);
   console.log("program is loaded on-chain and is a valid executable");
 
-  // Gets the data Id.
-  const dataId = await getDataId(payer, DataAccount.SEED, programId)
-  console.log("dataId:", dataId.toBase58());
+  // Gets the counter Id.
+  const counterId = await getCounterId(payer, Counter.SEED, programId)
+  console.log("counterId:", counterId.toBase58());
 
   // airdrop the payer in case there is not enough balance.
   if (balance < fees) {
@@ -81,13 +79,17 @@ async function main() {
   }
 
   // Creates the data account if it's not there already.
-  if (await checkDataAccount(conn, dataId)) {
-    console.log("data account is on-chain");
+  if (await checkCounter(conn, counterId)) {
+    console.log("counter is on-chain");
   } else {
-    console.log(`dataId(${dataId}) needed to be created`);
-    await createDataAccount(conn, payer, DataAccount.SPACE,
-                            DataAccount.SEED, dataId, programId);
+    console.log(`counter(Id=${counterId}) need to be created`);
+    await createCounter(conn, payer, Counter.SPACE,
+                        Counter.SEED, counterId, programId);
   }
+
+  // get the current counter.
+  const counter = await getCounter(conn, counterId);
+  console.log(`Current counter is ${counter}`);
 }
 
 async function establishConnection(url: string): Promise<Connection> {
@@ -143,7 +145,11 @@ async function checkProgramAccount(conn: Connection, programId: PublicKey) {
   }
 }
 
-async function getDataId(payer: Keypair, seed: string, programId: PublicKey): Promise<PublicKey> {
+async function getCounterId(
+  payer: Keypair,
+  seed: string,
+  programId: PublicKey,
+): Promise<PublicKey> {
   return await PublicKey.createWithSeed(
     payer.publicKey,
     seed,
@@ -151,9 +157,12 @@ async function getDataId(payer: Keypair, seed: string, programId: PublicKey): Pr
   );
 }
 
-async function checkDataAccount(conn: Connection, dataId: PublicKey): Promise<Boolean> {
-  const dataAccount = await conn.getAccountInfo(dataId);
-  if (dataAccount === null) {
+async function checkCounter(
+  conn: Connection,
+  counterId: PublicKey,
+): Promise<Boolean> {
+  const counter = await conn.getAccountInfo(counterId);
+  if (counter === null) {
     return false;
   } else {
     return true;
@@ -168,9 +177,9 @@ async function airdropPayer(conn: Connection, payer: Keypair, amount: number) {
   await conn.confirmTransaction(sig);
 }
 
-async function createDataAccount(
+async function createCounter(
   conn: Connection, payer: Keypair, space: number,
-  seed: string, dataId: PublicKey, programId: PublicKey,
+  seed: string, counterId: PublicKey, programId: PublicKey,
 ) {
   const lamports = await conn.getMinimumBalanceForRentExemption(space);
 
@@ -179,7 +188,7 @@ async function createDataAccount(
       fromPubkey: payer.publicKey,
       basePubkey: payer.publicKey,
       seed,
-      newAccountPubkey: dataId,
+      newAccountPubkey: counterId,
       lamports,
       space,
       programId,
@@ -187,6 +196,19 @@ async function createDataAccount(
   );
   const signers = [payer];
   await sendAndConfirmTransaction(conn, tx, signers);
+}
+
+async function getCounter(conn: Connection, counterId: PublicKey): Promise<number> {
+  const counterInfo = await conn.getAccountInfo(counterId);
+  if (counterInfo === null) {
+    throw 'Error: cannot find the counter on chain';
+  }
+  const counter = borsh.deserialize(
+    Counter.SCHEMA,
+    Counter,
+    counterInfo.data,
+  );
+  return counter.counter;
 }
 
 async function getConfig(): Promise<any> {
