@@ -25,37 +25,55 @@ main().then(
   },
 );
 
+class GreetingAccount {
+  counter = 0;
+  constructor(fields: {counter: number} | undefined = undefined) {
+    if (fields) {
+      this.counter = fields.counter;
+    }
+  }
+  static GreetingSchema = new Map([
+    [GreetingAccount, {kind: 'struct', fields: [['counter', 'u8']]}],
+  ]);
+  static SIZE = borsh.serialize(
+    GreetingAccount.GreetingSchema,
+    new GreetingAccount(),
+  ).length;
+  static SEED = "hello";
+}
+
 async function main() {
   console.log("hello world!");
 
   // Creates connection.
   const conn = await establishConnection("http://127.0.0.1:8899");
-  console.log("connection to cluster established on", conn.rpcEndpoint);
+  console.debug("connection to cluster established on", conn.rpcEndpoint);
 
-  // Get the payer for the transaction.
-  const payer = await getPayer(conn);
+  // Gets the payer for the transaction.
+  const payer = await getPayer(conn, GreetingAccount.SIZE);
   console.log("payer:", payer.publicKey.toBase58());
 
-  // get the program ID.
+  // Gets the program ID.
   const programId = await getProgramId(
     path.resolve(__dirname, "../../target/deploy/hello-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
 
-  // Check the program validity.
-  if (await checkProgramAccount(conn, programId)) {
-    console.log("program is loaded on-chain and is a valid executable");
-  }
+  // Checks the program validity.
+  await checkProgramAccount(conn, programId);
+  console.log("program is loaded on-chain and is a valid executable");
 
-  // Derive the address (public key) of a greeting data account from the
-  // program, so that it's easy to find later.
-  const GREETING_SEED = "hello";
-  const dataId = await getDataId(payer, GREETING_SEED, programId)
+  // Gets the data Id.
+  const dataId = await getDataId(payer, GreetingAccount.SEED, programId)
   console.log("dataId:", dataId.toBase58());
 
-  // create an data account if it's not there.
-  if (!await checkDataAccount(conn, dataId)) {
+  // Creates the data account if it's not there already.
+  if (await checkDataAccount(conn, dataId)) {
+    console.log("data account is on-chain");
+  } else {
     console.log(`dataId(${dataId}) needed to be created`);
+    await createDataAccount(conn, payer, GreetingAccount.SIZE,
+                            GreetingAccount.SEED, dataId, programId);
   }
 }
 
@@ -63,23 +81,7 @@ async function establishConnection(url: string): Promise<Connection> {
   return new Connection(url, "confirmed");
 }
 
-async function getPayer(conn: Connection): Promise<Keypair> {
-  class GreetingAccount {
-    counter = 0;
-    constructor(fields: {counter: number} | undefined = undefined) {
-      if (fields) {
-        this.counter = fields.counter;
-      }
-    }
-    static GreetingSchema = new Map([
-      [GreetingAccount, {kind: 'struct', fields: [['counter', 'u8']]}],
-    ]);
-    static SIZE = borsh.serialize(
-      GreetingAccount.GreetingSchema,
-      new GreetingAccount(),
-    ).length;
-  }
-  const size = GreetingAccount.SIZE;
+async function getPayer(conn: Connection, size: number): Promise<Keypair> {
   let fees = await conn.getMinimumBalanceForRentExemption(size);
   console.log("minimum fee for the rent exemption", fees, "for", size, "Byte(s)");
   const {feeCalculator} = await conn.getRecentBlockhash();
@@ -87,8 +89,16 @@ async function getPayer(conn: Connection): Promise<Keypair> {
   console.log("transaction fee for a single signature", fee_for_one_signature);
   fees += fee_for_one_signature; // just one signature.
   console.log("total transaction fee", fees);
-
-  return await parsePayer();
+  try {
+    const config = await getConfig();
+    if (!config.keypair_path) throw new Error("Missing keypair path");
+    return await createKeypairFromFile(config.keypair_path);
+  } catch (e) {
+    console.warn(
+      "Failed to create keypair from CLI config file, falling back to new random keypair",
+    );
+    return Keypair.generate();
+  }
 }
 
 async function getProgramId(filePath: string): Promise<PublicKey> {
@@ -103,14 +113,13 @@ async function getProgramId(filePath: string): Promise<PublicKey> {
   }
 }
 
-async function checkProgramAccount(conn: Connection, programId: PublicKey): Promise<Boolean> {
+async function checkProgramAccount(conn: Connection, programId: PublicKey) {
   const programInfo = await conn.getAccountInfo(programId);
   if (programInfo === null) {
     throw new Error("Program needs to be build and deployed");
   } else if (!programInfo.executable) {
     throw new Error("Program is not executable");
   }
-  return true;
 }
 
 async function getDataId(payer: Keypair, seed: string, programId: PublicKey): Promise<PublicKey> {
@@ -130,17 +139,25 @@ async function checkDataAccount(conn: Connection, dataId: PublicKey): Promise<Bo
   }
 }
 
-async function parsePayer(): Promise<Keypair> {
-  try {
-    const config = await getConfig();
-    if (!config.keypair_path) throw new Error("Missing keypair path");
-    return await createKeypairFromFile(config.keypair_path);
-  } catch (e) {
-    console.warn(
-      "Failed to create keypair from CLI config file, falling back to new random keypair",
-    );
-    return Keypair.generate();
-  }
+async function createDataAccount(
+  conn: Connection, payer: Keypair, space: number,
+  seed: string, dataId: PublicKey, programId: PublicKey,
+) {
+  const lamports = await conn.getMinimumBalanceForRentExemption(space);
+
+  const tx = new Transaction().add(
+    SystemProgram.createAccountWithSeed({
+      fromPubkey: payer.publicKey,
+      basePubkey: payer.publicKey,
+      seed,
+      newAccountPubkey: dataId,
+      lamports,
+      space,
+      programId,
+    }),
+  );
+  const signers = [payer];
+  await sendAndConfirmTransaction(conn, tx, signers);
 }
 
 async function getConfig(): Promise<any> {
