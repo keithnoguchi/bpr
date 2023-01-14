@@ -30,9 +30,6 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
-    // log a message to the blockchain.
-    msg!("Hello, world!");
-
     // get the program account info, which is the first account.
     let iter = &mut accounts.iter();
     let program_account = next_account_info(iter)?;
@@ -47,9 +44,13 @@ pub fn process_instruction(
     greeting_account.counter += 1;
     greeting_account.serialize(&mut &mut program_account.data.borrow_mut()[..])?;
 
+    // I think this macro returns from the function, because
+    // nothing happen, at least no counter update, if this
+    // line is above the counter update code above.
+    //
+    // I'll come back later about this macro, though.
     msg!("Greeted {} time(s)!", greeting_account.counter);
 
-    // gracefully exist the program.
     Ok(())
 }
 

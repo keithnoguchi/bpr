@@ -87,9 +87,15 @@ async function main() {
                         Counter.SEED, counterId, programId);
   }
 
-  // get the current counter.
-  const counter = await getCounter(conn, counterId);
-  console.log(`Current counter is ${counter}`);
+  // increment counter.
+  let counter;
+  for (let i = 0; i < 10; i++) {
+    counter = await getCounter(conn, counterId);
+    console.log(`before increment: counter=${counter}`);
+    await incrementCounter(conn, payer, counterId, programId);
+    counter = await getCounter(conn, counterId);
+    console.log(`after increment: counter=${counter}`);
+  }
 }
 
 async function establishConnection(url: string): Promise<Connection> {
@@ -209,6 +215,25 @@ async function getCounter(conn: Connection, counterId: PublicKey): Promise<numbe
     counterInfo.data,
   );
   return counter.counter;
+}
+
+async function incrementCounter(
+  conn: Connection,
+  payer: Keypair,
+  counterId: PublicKey,
+  programId: PublicKey,
+) {
+  const instruction = new TransactionInstruction({
+    keys: [{pubkey: counterId, isSigner: false, isWritable: true}],
+    programId,
+    data: Buffer.alloc(0),
+  });
+  const signers = [payer];
+  await sendAndConfirmTransaction(
+    conn,
+    new Transaction().add(instruction),
+    signers,
+  );
 }
 
 async function getConfig(): Promise<any> {
