@@ -17,15 +17,7 @@ import fs from "mz/fs";
 import path from "path";
 import yaml from "yaml";
 
-main().then(
-  () => process.exit(),
-  err => {
-    console.error(err);
-    process.exit(-1);
-  },
-);
-
-class GreetingAccount {
+class DataAccount {
   counter = 0;
   constructor(fields: {counter: number} | undefined = undefined) {
     if (fields) {
@@ -33,14 +25,23 @@ class GreetingAccount {
     }
   }
   static GreetingSchema = new Map([
-    [GreetingAccount, {kind: 'struct', fields: [['counter', 'u8']]}],
+    [DataAccount, {kind: 'struct', fields: [['counter', 'u8']]}],
   ]);
-  static SIZE = borsh.serialize(
-    GreetingAccount.GreetingSchema,
-    new GreetingAccount(),
+  static SPACE = borsh.serialize(
+    DataAccount.GreetingSchema,
+    new DataAccount(),
   ).length;
   static SEED = "hello";
+  static NUMBER_OF_SIGNATURES = 1;
 }
+
+main().then(
+  () => process.exit(),
+  err => {
+    console.error(err);
+    process.exit(-1);
+  },
+);
 
 async function main() {
   console.log("hello world!");
@@ -50,8 +51,13 @@ async function main() {
   console.debug("connection to cluster established on", conn.rpcEndpoint);
 
   // Gets the payer for the transaction.
-  const payer = await getPayer(conn, GreetingAccount.SIZE);
+  const payer = await getPayer(conn, DataAccount.SPACE);
   console.log("payer:", payer.publicKey.toBase58());
+
+  // Get the fees for the data account creation + transaction.
+  const fees = await getFees(conn, DataAccount.SPACE,
+                             DataAccount.NUMBER_OF_SIGNATURES);
+  console.log(`required fee (rent + tx fee): ${fees/LAMPORTS_PER_SOL}`);
 
   // Gets the program ID.
   const programId = await getProgramId(
@@ -64,7 +70,7 @@ async function main() {
   console.log("program is loaded on-chain and is a valid executable");
 
   // Gets the data Id.
-  const dataId = await getDataId(payer, GreetingAccount.SEED, programId)
+  const dataId = await getDataId(payer, DataAccount.SEED, programId)
   console.log("dataId:", dataId.toBase58());
 
   // Creates the data account if it's not there already.
@@ -72,8 +78,8 @@ async function main() {
     console.log("data account is on-chain");
   } else {
     console.log(`dataId(${dataId}) needed to be created`);
-    await createDataAccount(conn, payer, GreetingAccount.SIZE,
-                            GreetingAccount.SEED, dataId, programId);
+    await createDataAccount(conn, payer, DataAccount.SPACE,
+                            DataAccount.SEED, dataId, programId);
   }
 }
 
@@ -82,13 +88,6 @@ async function establishConnection(url: string): Promise<Connection> {
 }
 
 async function getPayer(conn: Connection, size: number): Promise<Keypair> {
-  let fees = await conn.getMinimumBalanceForRentExemption(size);
-  console.log("minimum fee for the rent exemption", fees, "for", size, "Byte(s)");
-  const {feeCalculator} = await conn.getRecentBlockhash();
-  const fee_for_one_signature = feeCalculator.lamportsPerSignature;
-  console.log("transaction fee for a single signature", fee_for_one_signature);
-  fees += fee_for_one_signature; // just one signature.
-  console.log("total transaction fee", fees);
   try {
     const config = await getConfig();
     if (!config.keypair_path) throw new Error("Missing keypair path");
@@ -99,6 +98,21 @@ async function getPayer(conn: Connection, size: number): Promise<Keypair> {
     );
     return Keypair.generate();
   }
+}
+
+async function getFees(
+  conn: Connection,
+  space: number,
+  number_of_signature: number,
+): Promise<number> {
+  let fees = await conn.getMinimumBalanceForRentExemption(space);
+  console.log("minimum fee for the rent exemption", fees, "for", space, "Byte(s)");
+  const {feeCalculator} = await conn.getRecentBlockhash();
+  const fee_for_one_signature = feeCalculator.lamportsPerSignature;
+  console.log("transaction fee for a single signature", fee_for_one_signature);
+  fees += fee_for_one_signature * number_of_signature;
+  console.log("total transaction fee", fees);
+  return fees;
 }
 
 async function getProgramId(filePath: string): Promise<PublicKey> {
