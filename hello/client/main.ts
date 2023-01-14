@@ -50,9 +50,11 @@ async function main() {
   const conn = await establishConnection("http://127.0.0.1:8899");
   console.debug("connection to cluster established on", conn.rpcEndpoint);
 
-  // Gets the payer for the transaction.
+  // Gets the payer/player for the transaction.
   const payer = await getPayer(conn, DataAccount.SPACE);
-  console.log("payer:", payer.publicKey.toBase58());
+  const balance = await conn.getBalance(payer.publicKey);
+  console.log(`payer(${balance/LAMPORTS_PER_SOL} SOL):`,
+              payer.publicKey.toBase58());
 
   // Get the fees for the data account creation + transaction.
   const fees = await getFees(conn, DataAccount.SPACE,
