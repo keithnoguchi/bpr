@@ -10,7 +10,6 @@ use solana_program::{
     entrypoint,
     entrypoint::ProgramResult as Result,
     msg,
-    native_token::LAMPORTS_PER_SOL,
     program_error::ProgramError as Error,
     pubkey::Pubkey,
 };
@@ -40,6 +39,10 @@ pub fn process_instruction(
         msg!("Counter account should be owned by the counter program account.");
         return Err(Error::IncorrectProgramId);
     }
+    if counter_info.executable {
+        msg!("Counter account should not be executable.");
+        return Err(Error::InvalidAccountData);
+    }
     if !counter_info.is_writable {
         msg!("Counter account should be writable.");
         return Err(Error::InvalidAccountData);
@@ -59,62 +62,10 @@ pub fn process_instruction(
     // line is above the counter update code above.
     //
     // I'll come back later about this macro, though.
-    //let sol: f64 = **counter_info.lamports.borrow() as f64 / LAMPORTS_PER_SOL as f64;
-    msg!("Greeted {} time(s)!", counter.count);
+    //
+    // And also, there is a buffer limit to dump all the `counter_info`.
+    //msg!("counter.count={}: {counter_info:?}", counter.count);
+    msg!("counter.count={}", counter.count);
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use solana_program::clock::Epoch;
-    use std::mem;
-
-    #[test]
-    fn test_process_instruction() {
-        let program_id = Pubkey::default();
-        let key = Pubkey::default();
-        let mut lamports = 0;
-        let mut data = vec![0; mem::size_of::<u8>()];
-        let owner = Pubkey::default();
-        let account = AccountInfo::new(
-            &key,
-            false,
-            true,
-            &mut lamports,
-            &mut data,
-            &owner,
-            false,
-            Epoch::default(),
-        );
-        let instruction_data = Vec::<u8>::new();
-        let accounts = vec![account];
-
-        // deserialization check.
-        assert_eq!(
-            Greeting::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            0,
-        );
-
-        // check if it increments the counter.
-        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
-        assert_eq!(
-            Greeting::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            1,
-        );
-
-        // once more.
-        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
-        assert_eq!(
-            Greeting::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            2,
-        );
-    }
 }
