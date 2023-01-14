@@ -19,7 +19,7 @@ use solana_program::{
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct Counter {
     /// Number of greetings it received.
-    pub count: u16,
+    pub count: u8,
 }
 
 // Declares and export the program's entrypoint.

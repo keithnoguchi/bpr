@@ -25,7 +25,7 @@ class Counter {
     }
   }
   static SCHEMA = new Map([
-    [Counter, {kind: 'struct', fields: [['count', 'u16']]}],
+    [Counter, {kind: 'struct', fields: [['count', 'u8']]}],
   ]);
   static SPACE = borsh.serialize(
     Counter.SCHEMA,
@@ -89,7 +89,7 @@ async function main() {
 
   // increment counter.
   let counter;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 100; i++) {
     counter = await getCounter(conn, counterId);
     console.log(`before increment: counter=${counter}`);
     await incrementCounter(conn, payer, counterId, programId);
