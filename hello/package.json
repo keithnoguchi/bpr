@@ -3,15 +3,16 @@
   "version": "1.0.0",
   "main": "client/main.ts",
   "license": "MIT",
-  "scripts": {
-    "build": "cargo build-bpf",
-    "deploy": "solana program deploy ../target/deploy/hello.so",
-    "test": "ts-node client/main.ts"
-  },
   "dependencies": {
     "@solana/web3.js": "^1.73.0",
     "@types/mz": "^2.7.4",
     "mz": "^2.7.0",
     "yaml": "^2.2.1"
+  },
+  "scripts": {
+    "b": "cargo build-bpf",
+    "d": "solana program deploy ../target/deploy/hello.so",
+    "t": "ts-node client/main.ts",
+    "all": "cargo build-bpf && solana program deploy ../target/deploy/hello.so && ts-node client/main.ts"
   }
 }

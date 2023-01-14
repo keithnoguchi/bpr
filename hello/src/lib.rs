@@ -8,17 +8,18 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
-    entrypoint::ProgramResult,
+    entrypoint::ProgramResult as Result,
     msg,
-    program_error::ProgramError,
+    native_token::LAMPORTS_PER_SOL,
+    program_error::ProgramError as Error,
     pubkey::Pubkey,
 };
 
-/// On-chain greeting data account.
+/// On-chain counter account.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
-pub struct Greeting {
+pub struct Counter {
     /// Number of greetings it received.
-    pub counter: u8,
+    pub count: u16,
 }
 
 // Declares and export the program's entrypoint.
@@ -29,27 +30,37 @@ pub fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
-) -> ProgramResult {
-    // get the program account info, which is the first account.
+) -> Result {
+    // get the data account info, which is the first account.
     let iter = &mut accounts.iter();
-    let program_account = next_account_info(iter)?;
 
-    if program_account.owner != program_id {
-        msg!("Greeting account does not have the correct program ID");
-        return Err(ProgramError::IncorrectProgramId);
+    // Get the `AccountInfo` of the `Counter` data account.
+    let counter_info = next_account_info(iter)?;
+    if counter_info.owner != program_id {
+        msg!("Counter account should be owned by the counter program account.");
+        return Err(Error::IncorrectProgramId);
+    }
+    if !counter_info.is_writable {
+        msg!("Counter account should be writable.");
+        return Err(Error::InvalidAccountData);
+    }
+    if counter_info.is_signer {
+        msg!("Counter account should not be the signer");
+        return Err(Error::InvalidAccountData);
     }
 
-    // Increment and store the number of times the account has been greeted.
-    let mut greeting_account = Greeting::try_from_slice(&program_account.data.borrow())?;
-    greeting_account.counter += 1;
-    greeting_account.serialize(&mut &mut program_account.data.borrow_mut()[..])?;
+    // Increments and store the number of times the account has been greeted.
+    let mut counter = Counter::try_from_slice(&counter_info.data.borrow())?;
+    counter.count += 1;
+    counter.serialize(&mut &mut counter_info.data.borrow_mut()[..])?;
 
     // I think this macro returns from the function, because
     // nothing happen, at least no counter update, if this
     // line is above the counter update code above.
     //
     // I'll come back later about this macro, though.
-    msg!("Greeted {} time(s)!", greeting_account.counter);
+    //let sol: f64 = **counter_info.lamports.borrow() as f64 / LAMPORTS_PER_SOL as f64;
+    msg!("Greeted {} time(s)!", counter.count);
 
     Ok(())
 }

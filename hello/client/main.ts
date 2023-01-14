@@ -18,14 +18,14 @@ import path from "path";
 import yaml from "yaml";
 
 class Counter {
-  counter = 0;
-  constructor(fields: {counter: number} | undefined = undefined) {
+  count = 0;
+  constructor(fields: {count: number} | undefined = undefined) {
     if (fields) {
-      this.counter = fields.counter;
+      this.count = fields.count;
     }
   }
   static SCHEMA = new Map([
-    [Counter, {kind: 'struct', fields: [['counter', 'u8']]}],
+    [Counter, {kind: 'struct', fields: [['count', 'u16']]}],
   ]);
   static SPACE = borsh.serialize(
     Counter.SCHEMA,
@@ -214,7 +214,7 @@ async function getCounter(conn: Connection, counterId: PublicKey): Promise<numbe
     Counter,
     counterInfo.data,
   );
-  return counter.counter;
+  return counter.count;
 }
 
 async function incrementCounter(
