@@ -87,14 +87,17 @@ async function main() {
                         Counter.SEED, counterId, programId);
   }
 
-  // increment counter.
-  let counter;
-  for (let i = 0; i < 100; i++) {
-    counter = await getCounter(conn, counterId);
-    console.log(`before increment: counter=${counter}`);
+  // call the counter program until it's wrap around.
+  let counter = await getCounter(conn, counterId);
+  console.log(`start of the counter=${counter}`);
+  while (true) {
     await incrementCounter(conn, payer, counterId, programId);
     counter = await getCounter(conn, counterId);
-    console.log(`after increment: counter=${counter}`);
+    if (counter == 0) {
+      console.log("counter wrapped around. Let's finish the call.");
+      break;
+    }
+    console.log(`after the instruction call: counter=${counter}`);
   }
 }
 
