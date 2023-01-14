@@ -1,10 +1,12 @@
 {
   "name": "client",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "client/main.ts",
   "license": "MIT",
   "scripts": {
-    "main": "ts-node main.ts"
+    "build": "cargo build-bpf",
+    "deploy": "solana program deploy ../target/deploy/hello.so",
+    "test": "ts-node client/main.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.73.0",
