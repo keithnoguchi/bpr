@@ -61,7 +61,7 @@ async function main() {
 
   // Gets the program ID.
   const programId = await getProgramId(
-    path.resolve(__dirname, "../../target/deploy/counter-keypair.json"),
+    path.resolve(__dirname, "../../target/deploy/solana_counter-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
 
@@ -97,7 +97,7 @@ async function main() {
       console.log("counter wrapped around. Let's finish the call.");
       break;
     }
-    console.log(`after the instruction call: counter=${counter}`);
+    process.stdout.write(".");
   }
 }
 

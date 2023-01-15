@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "counter",
+    "solana-counter",
     "ch11/merkle",
 ]

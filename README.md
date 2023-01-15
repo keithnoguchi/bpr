@@ -14,8 +14,8 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 [solana-program]: https://lib.rs/crates/solana-program
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 
-- [Counter](counter)
-  - A counter program with [solana-program] crate directly.
+- [Counter](solana-counter)
+  - A native solana counter program, as demonstrated in:
     - [Hello World on Solana](https://github.com/solana-labs/example-helloworld)
     - [Rust Program Quickstart Guide](https://docs.solana.com/getstarted/rust)
 - [token](token)

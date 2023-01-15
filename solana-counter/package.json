@@ -1,5 +1,5 @@
 {
-  "name": "counter",
+  "name": "counter0",
   "version": "1.0.0",
   "main": "client/main.ts",
   "license": "MIT",
@@ -11,8 +11,8 @@
   },
   "scripts": {
     "b": "cargo build-bpf",
-    "d": "solana program deploy ../target/deploy/counter.so",
+    "d": "solana program deploy ../target/deploy/solana_counter.so",
     "t": "ts-node client/main.ts",
-    "all": "cargo build-bpf && solana program deploy ../target/deploy/counter.so && ts-node client/main.ts"
+    "all": "cargo build-bpf && solana program deploy ../target/deploy/solana_counter.so && ts-node client/main.ts"
   }
 }

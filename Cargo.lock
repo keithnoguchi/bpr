@@ -247,14 +247,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3ad85c1f65dc7b37604eb0e89748faf0b9653065f2a8ef69f96a687ec1e9279"
 
 [[package]]
-name = "counter"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "solana-program",
-]
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -993,6 +985,14 @@ name = "smallvec"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
+
+[[package]]
+name = "solana-counter"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "solana-program",
+]
 
 [[package]]
 name = "solana-frozen-abi"
