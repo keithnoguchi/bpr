@@ -13,11 +13,16 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 
 [solana-program]: https://lib.rs/crates/solana-program
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
+[paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
 
-- [Counter](solana-counter)
+- [Solana Counter](solana-counter)
   - A native solana counter program, as demonstrated in:
     - [Hello World on Solana](https://github.com/solana-labs/example-helloworld)
     - [Rust Program Quickstart Guide](https://docs.solana.com/getstarted/rust)
+- [Solana Escrow](solana-escrow/program/src/)
+  - A native solana escrow program by [paulx].
+    - [Setup transactions](solana-escrow/scripts/src/setup.ts)
+    - [Alice's transaction](solana-escrow/scripts/src/alice.ts)
 - [token](token)
   - [createMint](token/001-createMint.js)
   - [createAccount](token/002-createAccount.js)

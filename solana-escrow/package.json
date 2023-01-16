@@ -1,0 +1,20 @@
+{
+  "name": "solana-escrow",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "license": "MIT",
+  "dependencies": {
+    "@solana/buffer-layout": "^4.0.1",
+    "@solana/spl-token": "^0.3.7",
+    "@solana/web3.js": "^1.73.0",
+    "@types/bn.js": "^5.1.1",
+    "bn.js": "^5.2.1"
+  },
+  "scripts": {
+    "b": "cd program && cargo build-bpf",
+    "c": "tsc -p ./tsconfig.json",
+    "d": "solana program deploy ../target/deploy/solana_escrow.so",
+    "setup": "yarn b && yarn c && yarn d && node ./scripts/build/setup.js",
+    "alice": "yarn c && node ./scripts/build/alice.js"
+  }
+}
