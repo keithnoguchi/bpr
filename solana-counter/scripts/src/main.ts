@@ -7,8 +7,9 @@ import {
   PublicKey,
   LAMPORTS_PER_SOL,
   SystemProgram,
-  TransactionInstruction,
   Transaction,
+  TransactionInstruction,
+  TransactionSignature,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import * as borsh from "borsh";
@@ -81,11 +82,12 @@ async function main() {
 
   // Creates the data account if it's not there already.
   if (await checkCounter(conn, counterId)) {
-    console.log("counter is on-chain");
+    console.log("counter state is on-chain");
   } else {
-    console.log(`counter(Id=${counterId}) need to be created`);
-    await createCounter(conn, payer, Counter.SPACE,
-                        Counter.SEED, counterId, programId);
+    console.log(`counter state (Id=${counterId}) need to be created`);
+    const tx = await createCounter(conn, payer, Counter.SPACE,
+                                   Counter.SEED, counterId, programId);
+    console.log("transaction sig:", tx);
   }
 
   // call the counter program until it's wrap around.
@@ -190,7 +192,7 @@ async function airdropPayer(conn: Connection, payer: Keypair, amount: number) {
 async function createCounter(
   conn: Connection, payer: Keypair, space: number,
   seed: string, counterId: PublicKey, programId: PublicKey,
-) {
+): Promise<TransactionSignature> {
   const lamports = await conn.getMinimumBalanceForRentExemption(space);
 
   const tx = new Transaction().add(
@@ -205,7 +207,7 @@ async function createCounter(
     }),
   );
   const signers = [payer];
-  await sendAndConfirmTransaction(conn, tx, signers);
+  return await sendAndConfirmTransaction(conn, tx, signers)
 }
 
 async function getCounter(conn: Connection, counterId: PublicKey): Promise<number> {
