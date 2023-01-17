@@ -2,7 +2,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
-    program::invoke,
+    program::{invoke, invoke_signed},
     program_error::ProgramError,
     program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
@@ -28,6 +28,9 @@ impl Processor {
         match Instruction::unpack(instruction_data)? {
             Instruction::InitEscrow { amount } => {
                 Self::process_init_escrow(accounts, amount, program_id)
+            }
+            Instruction::Exchange { amount } => {
+                Self::process_exchange(accounts, amount, program_id)
             }
         }
     }
@@ -101,6 +104,125 @@ impl Processor {
                 token_program.clone(),
             ],
         )?;
+
+        Ok(())
+    }
+
+    /// `Instruction::Exchnage` processor.
+    fn process_exchange(
+        accounts: &[AccountInfo],
+        amount_expected_by_taker: u64,
+        program_id: &Pubkey,
+    ) -> ProgramResult {
+        let accounts_iter = &mut accounts.iter();
+
+        // Preparing the taker side, e.g. Bob, of the accounts.
+        let taker = next_account_info(accounts_iter)?;
+        if !taker.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        let takers_sending_token_account = next_account_info(accounts_iter)?;
+        let takers_token_to_receive_account = next_account_info(accounts_iter)?;
+
+        // Making sure the temp token account holds the exact same amount
+        // as the taker's expected value.
+        let pdas_temp_token_account = next_account_info(accounts_iter)?;
+        let pdas_temp_token_account_info =
+            spl_token::state::Account::unpack(&pdas_temp_token_account.try_borrow_data()?)?;
+        if pdas_temp_token_account_info.amount != amount_expected_by_taker {
+            return Err(EscrowError::ExpectedAmountMismatch.into());
+        }
+
+        // Making sure the account info matches to the escrow state.
+        let initializers_main_account = next_account_info(accounts_iter)?;
+        let initializers_token_to_receive_account = next_account_info(accounts_iter)?;
+        let escrow_account = next_account_info(accounts_iter)?;
+        let escrow_info = Escrow::unpack(&escrow_account.try_borrow_data()?)?;
+        if *pdas_temp_token_account.key != escrow_info.temp_token_account_pubkey {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        if *initializers_main_account.key != escrow_info.initializer_pubkey {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        if *initializers_token_to_receive_account.key
+            != escrow_info.initializer_token_to_receive_account_pubkey
+        {
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        // Initiates CPI to [transfer] Y tokens from Bob to Alice.
+        //
+        // [transfer]: https://docs.rs/spl-token/latest/spl_token/instruction/fn.transfer.html
+        let token_program = next_account_info(accounts_iter)?;
+        let transfer_to_initializer_ix = spl_token::instruction::transfer(
+            token_program.key,
+            takers_sending_token_account.key,
+            initializers_token_to_receive_account.key,
+            taker.key,
+            &[taker.key],
+            escrow_info.expected_amount,
+        )?;
+        invoke(
+            &transfer_to_initializer_ix,
+            &[
+                takers_sending_token_account.clone(),
+                initializers_token_to_receive_account.clone(),
+                taker.clone(),
+                token_program.clone(),
+            ],
+        )?;
+
+        // Initiates CPI to [transfer] X tokens from Alice, escrow, to Bob.
+        //
+        // [transfer]: https://docs.rs/spl-token/latest/spl_token/instruction/fn.transfer.html
+        let pda_account = next_account_info(accounts_iter)?;
+        let (pda, bump) = Pubkey::find_program_address(&[b"escrow"], program_id);
+        let transfer_to_taker_ix = spl_token::instruction::transfer(
+            token_program.key,
+            pdas_temp_token_account.key,
+            takers_token_to_receive_account.key,
+            &pda,
+            &[&pda],
+            pdas_temp_token_account_info.amount,
+        )?;
+        invoke_signed(
+            &transfer_to_taker_ix,
+            &[
+                pdas_temp_token_account.clone(),
+                takers_token_to_receive_account.clone(),
+                pda_account.clone(),
+                token_program.clone(),
+            ],
+            &[&[&b"escrow"[..], &[bump]]],
+        )?;
+
+        // Close the temporary PDA account.
+        let close_pdas_temp_acct_ix = spl_token::instruction::close_account(
+            token_program.key,
+            pdas_temp_token_account.key,
+            initializers_main_account.key,
+            &pda,
+            &[&pda],
+        )?;
+        invoke_signed(
+            &close_pdas_temp_acct_ix,
+            &[
+                pdas_temp_token_account.clone(),
+                initializers_main_account.clone(),
+                pda_account.clone(),
+                token_program.clone(),
+            ],
+            &[&[&b"escrow"[..], &[bump]]],
+        )?;
+
+        // Finally, close the escrow state account and retrun
+        // back the rent lamports back to the initializer.
+        **initializers_main_account.try_borrow_mut_lamports()? = initializers_main_account
+            .lamports()
+            .checked_add(escrow_account.lamports())
+            .ok_or(EscrowError::AmountOverflow)?;
+        **escrow_account.try_borrow_mut_lamports()? = 0;
+        *escrow_account.try_borrow_mut_data()? = &mut [];
 
         Ok(())
     }

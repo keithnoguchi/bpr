@@ -37,7 +37,7 @@ const setup = async () => {
     bobPublicKey,
     clientKeypair,
   );
-  console.log("Sending 50X to Alice's X TokenAccount", aliceTokenAccountForX.toBase58());
+  console.log("Minting 50X to Alice's X TokenAccount", aliceTokenAccountForX.toBase58());
   const tx4 = await token.mintTo(conn, clientKeypair, mintX, aliceTokenAccountForX,
                                  clientKeypair, 50);
   console.log("Transaction ID:", tx4);
@@ -52,7 +52,7 @@ const setup = async () => {
     clientKeypair,
   );
 
-  console.log("Sending 60Y to Bob's Y TokenAccount", bobTokenAccountForY.toBase58());
+  console.log("Minting 60Y to Bob's Y TokenAccount", bobTokenAccountForY.toBase58());
   const tx5 = await token.mintTo(conn, clientKeypair, mintY, bobTokenAccountForY,
                                  clientKeypair, 60);
   console.log("Transaction ID:", tx5);

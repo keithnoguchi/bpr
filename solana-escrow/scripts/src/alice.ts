@@ -9,12 +9,12 @@ import {
 import * as token from "@solana/spl-token";
 import BN = require("bn.js");
 import {
+  getEscrowTerms,
   ESCROW_ACCOUNT_DATA_LAYOUT,
 } from "./escrow";
 import {
   getKeypair,
   getPublicKey,
-  getEscrowTerms,
   getTokenBalance,
   writePublicKey,
 } from "./utils";

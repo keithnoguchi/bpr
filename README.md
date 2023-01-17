@@ -17,13 +17,14 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 [paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 
-- [A Solana Counter Program](solana-counter/program)
+- [A Solana Counter Program](solana-counter/program/src/lib.rs)
   - A native solana counter program by [Solana Labs].
-  - [Test transaction](solana-counter/scripts/src/main.ts)
-- [A Solana Escrow Program](solana-escrow/program)
+    - [Counter up transactions](solana-counter/scripts/src/main.ts)
+- [A Solana Escrow Program](solana-escrow/program/src/processor.rs)
   - A native solana escrow program by [paulx].
-  - [Setup transactions](solana-escrow/scripts/src/setup.ts)
-  - [Alice's transaction](solana-escrow/scripts/src/alice.ts)
+    - [Setup transactions](solana-escrow/scripts/src/setup.ts)
+    - [Alice's InitEscrow transaction](solana-escrow/scripts/src/alice.ts)
+    - [Bob's Exchange transaction](solana-escrow/scripts/src/bob.ts)
 - [token](token)
   - [createMint](token/001-createMint.js)
   - [createAccount](token/002-createAccount.js)

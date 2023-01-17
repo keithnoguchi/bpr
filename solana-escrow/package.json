@@ -14,7 +14,11 @@
     "b": "cd program && cargo build-bpf",
     "c": "tsc -p ./tsconfig.json",
     "d": "solana program deploy ../target/deploy/solana_escrow.so",
+    "f": "cd program && cargo fmt && cargo clippy",
     "setup": "yarn b && yarn c && yarn d && node ./scripts/build/setup.js",
-    "alice": "yarn c && node ./scripts/build/alice.js"
+    "alice": "yarn c && node ./scripts/build/alice.js",
+    "bob": "yarn c && node ./scripts/build/bob.js",
+    "test": "yarn setup && yarn alice && yarn bob",
+    "all": "yarn b && yarn c && yarn d && yarn test"
   }
 }

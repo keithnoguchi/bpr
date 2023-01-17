@@ -37,9 +37,3 @@ export const getTokenBalance = async (
   );
 };
 
-export const getEscrowTerms = (): {
-  aliceExpectedAmount: number,
-  bobExpectedAmount: number,
-} => {
-  return JSON.parse(fs.readFileSync(`./escrow-terms.json`) as unknown as string);
-};

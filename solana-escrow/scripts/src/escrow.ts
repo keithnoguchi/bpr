@@ -1,4 +1,5 @@
 import * as BufferLayout from "@solana/buffer-layout";
+import * as fs from "fs";
 
 // Layout for a public key.
 const publicKey = (property = "publicKey") => {
@@ -23,3 +24,18 @@ export const ESCROW_ACCOUNT_DATA_LAYOUT = BufferLayout.struct([
   //@ts-expect-error missing types
   uint64("expectedAmount"),
 ]);
+
+export interface EscrowLayout {
+  isInitialized: number,
+  initializerPubkey: Uint8Array,
+  initializerReceivingTokenAccountPubkey: Uint8Array,
+  initializerTempTokenAccountPubkey: Uint8Array,
+  expectedAmount: Uint8Array,
+}
+
+export const getEscrowTerms = (): {
+  aliceExpectedAmount: number,
+  bobExpectedAmount: number,
+} => {
+  return JSON.parse(fs.readFileSync(`./escrow-terms.json`) as unknown as string);
+};

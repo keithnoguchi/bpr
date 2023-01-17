@@ -4,6 +4,8 @@ use solana_program::program_error::ProgramError;
 pub(crate) enum EscrowError {
     InvalidInstruction,
     NotRentExempt,
+    ExpectedAmountMismatch,
+    AmountOverflow,
 }
 
 /// Converts the escrow errors into native `ProgramError`.
