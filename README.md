@@ -15,6 +15,7 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 [rust program quickstart guide]: https://docs.solana.com/getstarted/rust
 [solana labs]: https://github.com/solana-labs/example-helloworld
 [paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
+[anchor]: https://anchor-lang.com
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 
 - [A Solana Counter Program](solana-counter/program/src/lib.rs)
@@ -25,14 +26,9 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
     - [Setup transactions](solana-escrow/scripts/src/setup.ts)
     - [Alice's InitEscrow transaction](solana-escrow/scripts/src/alice.ts)
     - [Bob's Exchange transaction](solana-escrow/scripts/src/bob.ts)
-- [token](token)
-  - [createMint](token/001-createMint.js)
-  - [createAccount](token/002-createAccount.js)
-  - [closeAccount](token/003-closeAccount.js)
-  - [createMultisig](token/004-createMultisig.js)
-- [Calculator](calc/programs/calc/src/lib.rs)
-- [Tic-Tac-Toe](t3/programs/t3/src/lib.rs)
-  - Refer to [Anchor]'s [Tic-Tac-Toe Project].
+- [An Anchor Counter Program](anchor-counter/programs/anchor-counter/src/lib.rs)
+  - An [Anchor] version of the `Counter` program.
+    - [Integration test](anchor-counter/tests/anchor-counter.ts)
 
 ## Setup
 
