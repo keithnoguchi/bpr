@@ -16,6 +16,8 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 [solana labs]: https://github.com/solana-labs/example-helloworld
 [paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
 [anchor]: https://anchor-lang.com
+[doug anderson]: https://learn.figment.io/tutorials/build-a-blog-dapp-using-anchor
+[svelte]: https://svelte.dev/
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 
 - [A Solana Counter Program](solana-counter/program/src/lib.rs)
@@ -29,6 +31,8 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 - [An Anchor Counter Program](anchor-counter/programs/anchor-counter/src/lib.rs)
   - An [Anchor] version of the `Counter` program.
     - [Integration test](anchor-counter/tests/anchor-counter.ts)
+- [An Anchor Blog Program](anchor-blog/programs/anchor-blog/src/lib.rs)
+  - An [Anchor] version of the `Blog` program by [Doug Anderson].
 
 ## Setup
 
