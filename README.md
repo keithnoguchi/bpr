@@ -12,17 +12,18 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 ## Programs
 
 [solana-program]: https://lib.rs/crates/solana-program
-[tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
+[rust program quickstart guide]: https://docs.solana.com/getstarted/rust
+[solana labs]: https://github.com/solana-labs/example-helloworld
 [paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
+[tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
 
-- [Solana Counter](solana-counter)
-  - A native solana counter program, as demonstrated in:
-    - [Hello World on Solana](https://github.com/solana-labs/example-helloworld)
-    - [Rust Program Quickstart Guide](https://docs.solana.com/getstarted/rust)
-- [Solana Escrow](solana-escrow/program/src/)
+- [A Solana Counter Program](solana-counter/program)
+  - A native solana counter program by [Solana Labs].
+  - [Test transaction](solana-counter/scripts/src/main.ts)
+- [A Solana Escrow Program](solana-escrow/program)
   - A native solana escrow program by [paulx].
-    - [Setup transactions](solana-escrow/scripts/src/setup.ts)
-    - [Alice's transaction](solana-escrow/scripts/src/alice.ts)
+  - [Setup transactions](solana-escrow/scripts/src/setup.ts)
+  - [Alice's transaction](solana-escrow/scripts/src/alice.ts)
 - [token](token)
   - [createMint](token/001-createMint.js)
   - [createAccount](token/002-createAccount.js)

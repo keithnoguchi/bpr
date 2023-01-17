@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "solana-counter",
+    "solana-counter/program",
     "solana-escrow/program",
     "ch11/merkle",
 ]

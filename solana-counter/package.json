@@ -10,9 +10,10 @@
     "yaml": "^2.2.1"
   },
   "scripts": {
-    "b": "cargo build-bpf",
+    "b": "cd program && cargo build-bpf",
+    "c": "tsc -p ./tsconfig.json",
     "d": "solana program deploy ../target/deploy/solana_counter.so",
-    "t": "ts-node client/main.ts",
-    "all": "cargo build-bpf && solana program deploy ../target/deploy/solana_counter.so && ts-node client/main.ts"
+    "t": "yarn c && node ./scripts/build/main.js",
+    "all": "yarn b && yarn c && yarn d && yarn t"
   }
 }

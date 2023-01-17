@@ -12,10 +12,10 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import * as borsh from "borsh";
-import os from "os";
-import fs from "mz/fs";
-import path from "path";
-import yaml from "yaml";
+import * as os from "os";
+import * as fs from "mz/fs";
+import * as path from "path";
+import * as yaml from "yaml";
 
 class Counter {
   count = 0;
@@ -24,6 +24,7 @@ class Counter {
       this.count = fields.count;
     }
   }
+  //@ts-expect-error missing types
   static SCHEMA = new Map([
     [Counter, {kind: 'struct', fields: [['count', 'u8']]}],
   ]);
@@ -61,7 +62,7 @@ async function main() {
 
   // Gets the program ID.
   const programId = await getProgramId(
-    path.resolve(__dirname, "../../target/deploy/solana_counter-keypair.json"),
+    path.resolve(__dirname, "../../../target/deploy/solana_counter-keypair.json"),
   );
   console.log("programId:", programId.toBase58());
 
