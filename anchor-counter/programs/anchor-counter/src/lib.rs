@@ -1,7 +1,7 @@
 //! An anchor counter program.
 use anchor_lang::prelude::*;
 
-declare_id!("pXTg1SQB2e2kSAyUhAbYoAL4ubEdYAx6uJmSYMt8wHg");
+declare_id!("3GoNh65e4YAHNnadkNNfUGM9VVxeV4U4NxiWQ2TFVG37");
 
 /// An anchor counter program.
 #[program]
