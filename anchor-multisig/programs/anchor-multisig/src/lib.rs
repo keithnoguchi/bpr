@@ -25,6 +25,8 @@ pub mod anchor_multisig {
         threshold: u64,
         nonce: u8,
     ) -> Result<()> {
+        let multisig = &mut ctx.accounts.multisig;
+        multisig.nonce = nonce;
         Ok(())
     }
 }
