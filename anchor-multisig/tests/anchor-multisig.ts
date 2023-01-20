@@ -63,6 +63,7 @@ describe("anchor-multisig", () => {
     //
     // We can treat the `multisigAccount.nonce`
     // as the standard integer because it's u8.
-    expect(multisigAccount.nonce).is.equal(nonce);
+    expect(multisigAccount.nonce).is.eql(nonce);
+    expect(multisigAccount.threshold.eq(new anchor.BN(3)));
   });
 });
