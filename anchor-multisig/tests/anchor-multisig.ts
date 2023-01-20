@@ -60,6 +60,9 @@ describe("anchor-multisig", () => {
       .multisig.fetch(multisig.publicKey);
 
     // nonce should be strict equal, e.g. '==='
+    //
+    // We can treat the `multisigAccount.nonce`
+    // as the standard integer because it's u8.
     expect(multisigAccount.nonce).is.equal(nonce);
   });
 });
