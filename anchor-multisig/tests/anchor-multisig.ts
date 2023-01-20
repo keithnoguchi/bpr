@@ -67,5 +67,6 @@ describe("anchor-multisig", () => {
     expect(multisigAccount.nonce).is.eql(nonce);
     expect(multisigAccount.threshold.eq(new anchor.BN(3)));
     expect(multisigAccount.owners).is.eql(owners);
+    expect(multisigAccount.ownerSetSeqno).is.eql(0);
   });
 });
