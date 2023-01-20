@@ -1,7 +1,7 @@
 import * as anchor from "@project-serum/anchor";
 import { Program } from "@project-serum/anchor";
 import { AnchorMultisig } from "../target/types/anchor_multisig";
-import { expect } from 'chai';
+import { expect } from "chai";
 
 describe("anchor-multisig", () => {
   // Configure the client to use the local cluster.
@@ -56,8 +56,9 @@ describe("anchor-multisig", () => {
 
     console.log("Multisig account had been created", tx);
 
-    let multisigAccount = await program.account
-      .multisig.fetch(multisig.publicKey);
+    let multisigAccount = await program.account.multisig.fetch(
+      multisig.publicKey
+    );
 
     // nonce should be strict equal, e.g. '==='
     //
