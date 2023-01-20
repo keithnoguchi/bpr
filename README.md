@@ -16,6 +16,7 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 [solana labs]: https://github.com/solana-labs/example-helloworld
 [paulx]: https://paulx.dev/blog/2021/01/14/programming-on-solana-an-introduction/
 [anchor]: https://anchor-lang.com
+[coral-xyz]: https://github.com/coral-xyz/multisig/blob/master/programs/multisig/src/lib.rs
 [doug anderson]: https://learn.figment.io/tutorials/build-a-blog-dapp-using-anchor
 [svelte]: https://svelte.dev/
 [tic-tac-toe project]: https://www.anchor-lang.com/docs/tic-tac-toe
@@ -31,6 +32,8 @@ in [Rust] with [Anchor] for [Solana] [Blockchain].
 - [An Anchor Counter Program](anchor-counter/programs/anchor-counter/src/lib.rs)
   - An [Anchor] version of the `Counter` program.
     - [Integration test](anchor-counter/tests/anchor-counter.ts)
+- [An Anchor Multisig Program](anchor-multisig/programs/anchor-multisig/src/lib.rs)
+  - An [Anchor] version of the `Multisig` program, as in [coral-xyz].
 - [An Anchor Blog Program](anchor-blog/programs/anchor-blog/src/lib.rs)
   - An [Anchor] version of the `Blog` program by [Doug Anderson].
 
