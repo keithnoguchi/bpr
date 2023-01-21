@@ -9,7 +9,17 @@ describe("anchor-multisig", () => {
 
   const program = anchor.workspace.AnchorMultisig as Program<AnchorMultisig>;
 
-  it("creates multisig account", async () => {
+  // A cache some of the account to share the multiple
+  // test below.
+  let _multisig;
+  let _multisigSigner;
+  let _ownerA;
+  let _ownerB;
+  let _ownerC;
+  let _ownerD;
+  let _ownerE;
+
+  it("creates a multisig account", async () => {
     const multisig = anchor.web3.Keypair.generate();
 
     // Get the nonce for the PDA based on the multisig
@@ -68,5 +78,69 @@ describe("anchor-multisig", () => {
     expect(multisigAccount.threshold.eq(new anchor.BN(3)));
     expect(multisigAccount.owners).is.eql(owners);
     expect(multisigAccount.ownerSetSeqno).is.eql(0);
+
+    // Caches the multisig account for the following
+    // test.
+    _multisig = multisig;
+    _multisigSigner = multisigSigner;
+    _ownerA = ownerA;
+    _ownerB = ownerB;
+    _ownerC = ownerC;
+    _ownerD = ownerD;
+    _ownerE = ownerE;
+  });
+
+  it("creates a transaction account", async () => {
+    const multisig = _multisig;
+    const multisigSigner = _multisigSigner;
+    const ownerA = _ownerA;
+    const ownerB = _ownerB;
+    const ownerC = _ownerC;
+
+    const accounts = [
+      {
+        pubkey: multisig.publicKey,
+        isWritable: true,
+        isSigner: false,
+      },
+      {
+        pubkey: multisigSigner,
+        isWritable: false,
+        isSigner: true,
+      },
+    ];
+    const data = program.coder.instruction.encode("set_owners", {
+      owners: [ownerA, ownerB, ownerC],
+    });
+
+    // A new transaction keypair.
+    const transaction = anchor.web3.Keypair.generate();
+
+    // A transaction account size.
+    //
+    // I'll come back here for the proper sizing.
+    const txSize = 1000;
+
+    const tx = await program.rpc.createTransaction(
+      program.publicKey,
+      accounts,
+      data,
+      {
+        accounts: {
+          multisig: multisig.publicKey,
+          transaction: transaction.publicKey,
+          proposer: ownerA.publicKey,
+        },
+        instructions: [
+          await program.account.transaction.createInstruction(
+            transaction,
+            txSize
+          ),
+        ],
+        signers: [transaction, ownerA],
+      }
+    );
+
+    console.log("Transaction under Multisig account had been created", tx);
   });
 });
