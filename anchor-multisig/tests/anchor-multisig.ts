@@ -90,7 +90,7 @@ describe("anchor-multisig", () => {
     _ownerE = ownerE;
   });
 
-  it("creates a transaction account", async () => {
+  it("creates a transaction", async () => {
     const multisig = _multisig;
     const multisigSigner = _multisigSigner;
     const ownerA = _ownerA;
@@ -107,11 +107,14 @@ describe("anchor-multisig", () => {
         pubkey: multisigSigner,
         isWritable: false,
         isSigner: true,
-      },
+      }
     ];
-    const data = program.coder.instruction.encode("set_owners", {
-      owners: [ownerA, ownerB, ownerC],
-    });
+    const data = program
+      .coder
+      .instruction
+      .encode("set_owners", {
+        owners: [ownerA, ownerB, ownerC]
+      });
 
     // A new transaction keypair.
     const transaction = anchor.web3.Keypair.generate();
@@ -121,25 +124,27 @@ describe("anchor-multisig", () => {
     // I'll come back here for the proper sizing.
     const txSize = 1000;
 
-    const tx = await program.rpc.createTransaction(
-      program.publicKey,
-      accounts,
-      data,
-      {
-        accounts: {
-          multisig: multisig.publicKey,
-          transaction: transaction.publicKey,
-          proposer: ownerA.publicKey,
-        },
-        instructions: [
-          await program.account.transaction.createInstruction(
-            transaction,
-            txSize
-          ),
-        ],
-        signers: [transaction, ownerA],
-      }
-    );
+    const tx = await program
+      .rpc
+      .createTransaction(
+        program.publicKey,
+        accounts,
+        data,
+        {
+          accounts: {
+            multisig: multisig.publicKey,
+            transaction: transaction.publicKey,
+            proposer: ownerA.publicKey,
+          },
+          instructions: [
+            await program.account.transaction
+            .createInstruction(
+              transaction,
+              txSize
+            ),
+          ],
+          signers: [transaction, ownerA]
+        });
 
     console.log("Transaction under Multisig account had been created", tx);
   });
