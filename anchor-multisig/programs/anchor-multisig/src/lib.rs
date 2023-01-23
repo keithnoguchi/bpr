@@ -19,8 +19,8 @@ declare_id!("EYg7btAzuDC6MoYeCN9YzZcWu3T25Xqt7SEhcTbdbnG2");
 pub mod anchor_multisig {
     use super::*;
 
-    pub fn create_multisig(
-        ctx: Context<CreateMultisig>,
+    pub fn initialize_multisig(
+        ctx: Context<InitializeMultisig>,
         owners: Vec<Pubkey>,
         threshold: u64,
         nonce: u8,
@@ -34,7 +34,7 @@ pub mod anchor_multisig {
 }
 
 #[derive(Accounts)]
-pub struct CreateMultisig<'info> {
+pub struct InitializeMultisig<'info> {
     #[account(zero, signer)]
     multisig: Box<Account<'info, Multisig>>,
 }
