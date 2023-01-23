@@ -9,23 +9,25 @@ describe("anchor-multisig", () => {
 
   const program = anchor.workspace.AnchorMultisig as Program<AnchorMultisig>;
 
+  // Candidate owners for 2/3 multisig account.
+  const ownerA = anchor.web3.Keypair.generate();
+  const ownerB = anchor.web3.Keypair.generate();
+  const ownerC = anchor.web3.Keypair.generate();
+  const ownerD = anchor.web3.Keypair.generate();
+  const ownerE = anchor.web3.Keypair.generate();
+
+  // This is the 2/3 multisig account keypair.
+  const multisigKeypair = anchor.web3.Keypair.generate();
+
   // A cache some of the account to share the multiple
   // test below.
-  let _multisigKeypair;
   let _multisigSigner;
-  let _ownerA;
-  let _ownerB;
-  let _ownerC;
-  let _ownerD;
-  let _ownerE;
 
   it("creates and initialize a multisig account", async () => {
-    // Here is the multisig account keypair and the size.
-    //
     // The size is not tuned yet and will come back how
     // to adjust to the actual size, e.g. number of
     // owners of this multisig account.
-    const accountKeypair = anchor.web3.Keypair.generate();
+    const accountKeypair = multisigKeypair;
     const accountSize = 200;
 
     // Get the nonce for the PDA based on the multisig
@@ -36,24 +38,17 @@ describe("anchor-multisig", () => {
       await anchor.web3.PublicKey.findProgramAddress(
         [accountKeypair.publicKey.toBuffer()],
         program.programId
-      );
+    );
 
-    // 3/5 multisig example.
-    const ownerA = anchor.web3.Keypair.generate();
-    const ownerB = anchor.web3.Keypair.generate();
-    const ownerC = anchor.web3.Keypair.generate();
-    const ownerD = anchor.web3.Keypair.generate();
-    const ownerE = anchor.web3.Keypair.generate();
-    const owners = [
+    // A, B, and C is the original owner.
+    const originalOwners = [
       ownerA.publicKey,
       ownerB.publicKey,
       ownerC.publicKey,
-      ownerD.publicKey,
-      ownerE.publicKey,
     ];
-    const threshold = new anchor.BN(3);
+    const threshold = new anchor.BN(2);
 
-    const tx = await program.rpc.initializeMultisig(owners, threshold, nonce, {
+    const tx = await program.rpc.initializeMultisig(originalOwners, threshold, nonce, {
       accounts: {
         multisig: accountKeypair.publicKey,
       },
@@ -80,21 +75,18 @@ describe("anchor-multisig", () => {
 
     // Caches the multisig account for the following
     // test.
-    _multisigKeypair = accountKeypair;
     _multisigSigner = accountSigner;
-    _ownerA = ownerA;
-    _ownerB = ownerB;
-    _ownerC = ownerC;
-    _ownerD = ownerD;
-    _ownerE = ownerE;
   });
 
   it("creates and initializes a transaction", async () => {
-    const multisigKeypair = _multisigKeypair;
+    // A new transaction keypair and size.
+    //
+    // We don't need this huge account size and will
+    // come back here for the proper sizing.
+    const accountKeypair = anchor.web3.Keypair.generate();
+    const accountSize = 1000;
+
     const multisigSigner = _multisigSigner;
-    const ownerA = _ownerA;
-    const ownerB = _ownerB;
-    const ownerC = _ownerC;
 
     const accounts = [
       {
@@ -108,17 +100,11 @@ describe("anchor-multisig", () => {
         isSigner: true,
       },
     ];
+
+    // Change the owner to A, B, and D, instead of D.
     const data = program.coder.instruction.encode("set_owners", {
-      owners: [ownerA, ownerB, ownerC],
+      owners: [ownerA, ownerB, ownerD],
     });
-
-    // A new transaction keypair.
-    const transaction = anchor.web3.Keypair.generate();
-
-    // A transaction account size.
-    //
-    // I'll come back here for the proper sizing.
-    const txSize = 1000;
 
     const tx = await program.rpc.initializeTransaction(
       program.publicKey,
@@ -132,8 +118,8 @@ describe("anchor-multisig", () => {
         },
         instructions: [
           await program.account.transaction.createInstruction(
-            transaction,
-            txSize
+            accountKeypair,
+            accountSize,
           ),
         ],
         signers: [transaction, ownerA],
