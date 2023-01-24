@@ -118,7 +118,7 @@ describe("anchor-multisig", () => {
             accountSize
           ),
         ],
-        signers: [transaction, ownerA],
+        signers: [accountKeypair, ownerA],
       }
     );
 
