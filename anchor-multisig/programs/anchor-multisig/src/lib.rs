@@ -45,13 +45,24 @@ pub mod anchor_multisig {
         tx_accounts: Vec<TransactionInfo>,
         tx_data: Vec<u8>,
     ) -> Result<()> {
-        let owner_index = ctx
+        // Signers vector, set `true` for the proposer.
+        let signers: Vec<_> = ctx
             .accounts
             .multisig
             .owners
             .iter()
-            .position(|a| a == ctx.accounts.proposer.key)
-            .ok_or(Error::InvalidOwner)?;
+            .map(|key| key == ctx.accounts.proposer.key)
+            .collect();
+
+        // Initialize the transaciton account.
+        let tx = &mut ctx.accounts.transaction;
+        tx.program_id = tx_program_id;
+        tx.accounts = tx_accounts;
+        tx.data = tx_data;
+        tx.signers = signers;
+        tx.multisig = ctx.accounts.multisig.key();
+        tx.executed = false;
+        tx.owner_set_seqno = ctx.accounts.multisig.owner_set_seqno;
 
         Ok(())
     }
@@ -132,7 +143,7 @@ pub struct Transaction {
     pub signers: Vec<bool>,
 
     /// Boolean ensuring one time execution.
-    pub did_executed: bool,
+    pub executed: bool,
 
     /// Owner set sequence number.
     pub owner_set_seqno: u32,
