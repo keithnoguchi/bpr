@@ -9,19 +9,24 @@ describe("anchor-multisig", () => {
 
   const program = anchor.workspace.AnchorMultisig as Program<AnchorMultisig>;
 
-  // Candidate owners for 2/3 multisig account.
+  // Dummy owners for the tests.
   const ownerA = anchor.web3.Keypair.generate();
   const ownerB = anchor.web3.Keypair.generate();
   const ownerC = anchor.web3.Keypair.generate();
   const ownerD = anchor.web3.Keypair.generate();
   const ownerE = anchor.web3.Keypair.generate();
 
-  // This is the 2/3 multisig account keypair.
+  // Test multisig keypair.
   const multisigKeypair = anchor.web3.Keypair.generate();
 
-  // A cache some of the account to share the multiple
-  // test below.
-  let _multisigSigner;
+  // Get the bump for the PDA based on the multisig
+  // address.  The bump is stored in the multisig
+  // data account and the accountSigner will be used
+  // for the transaction creation below.
+  const [multisigSigner, bump] = anchor.web3.PublicKey.findProgramAddressSync(
+    [multisigKeypair.publicKey.toBuffer()],
+    program.programId
+  );
 
   it("Creates and initialize a multisig account", async () => {
     // The size is not tuned yet and will come back how
@@ -29,16 +34,6 @@ describe("anchor-multisig", () => {
     // owners of this multisig account.
     const accountKeypair = multisigKeypair;
     const accountSize = 200;
-
-    // Get the bump for the PDA based on the multisig
-    // address.  The bump is stored in the multisig
-    // data account and the accountSigner will be used
-    // for the transaction creation below.
-    const [accountSigner, bump] =
-      await anchor.web3.PublicKey.findProgramAddress(
-        [accountKeypair.publicKey.toBuffer()],
-        program.programId
-      );
 
     // A, B, and C is the original owner.
     const owners = [ownerA.publicKey, ownerB.publicKey, ownerC.publicKey];
@@ -66,10 +61,6 @@ describe("anchor-multisig", () => {
     assert.isTrue(got.threshold.eq(new anchor.BN(2)));
     assert.deepEqual(got.owners, owners);
     assert.strictEqual(got.ownerSetSeqno, 0);
-
-    // Caches the multisig account for the following
-    // test.
-    _multisigSigner = accountSigner;
   });
 
   it("Creates and initializes a transaction", async () => {
@@ -79,8 +70,6 @@ describe("anchor-multisig", () => {
     // come back here for the proper sizing.
     const accountKeypair = anchor.web3.Keypair.generate();
     const accountSize = 1000;
-
-    const multisigSigner = _multisigSigner;
 
     const accounts = [
       {
