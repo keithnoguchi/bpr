@@ -23,12 +23,25 @@ pub mod anchor_multisig {
         ctx: Context<InitializeMultisig>,
         owners: Vec<Pubkey>,
         threshold: u64,
-        nonce: u8,
+        bump: u8,
     ) -> Result<()> {
         let multisig = &mut ctx.accounts.multisig;
         multisig.owners = owners;
         multisig.threshold = threshold;
-        multisig.nonce = nonce;
+        multisig.bump = bump;
+        multisig.owner_set_seqno = 0;
+        Ok(())
+    }
+
+    pub fn set_owners(ctx: Context<Auth>, owners: Vec<Pubkey>) -> Result<()> {
+        let multisig = &mut ctx.accounts.multisig;
+
+        let owners_len = owners.len() as u64;
+        if owners_len < multisig.threshold {
+            multisig.threshold = owners_len;
+        }
+        multisig.owners = owners;
+        multisig.owner_set_seqno += 1;
         Ok(())
     }
 }
@@ -39,10 +52,19 @@ pub struct InitializeMultisig<'info> {
     multisig: Box<Account<'info, Multisig>>,
 }
 
+#[derive(Accounts)]
+pub struct Auth<'info> {
+    #[account(mut)]
+    multisig: Box<Account<'info, Multisig>>,
+    #[account(seeds = [multisig.key().as_ref()], bump = multisig.bump)]
+    multisig_signer: Signer<'info>,
+}
+
 #[account]
+#[derive(Debug, Default)]
 pub struct Multisig {
     pub owners: Vec<Pubkey>,
     pub threshold: u64,
-    pub nonce: u8,
+    pub bump: u8,
     pub owner_set_seqno: u32,
 }

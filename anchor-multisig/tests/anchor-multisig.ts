@@ -30,25 +30,21 @@ describe("anchor-multisig", () => {
     const accountKeypair = multisigKeypair;
     const accountSize = 200;
 
-    // Get the nonce for the PDA based on the multisig
-    // address.  The nonce is stored in the multisig
+    // Get the bump for the PDA based on the multisig
+    // address.  The bump is stored in the multisig
     // data account and the accountSigner will be used
     // for the transaction creation below.
-    const [accountSigner, nonce] =
+    const [accountSigner, bump] =
       await anchor.web3.PublicKey.findProgramAddress(
         [accountKeypair.publicKey.toBuffer()],
         program.programId
-    );
+      );
 
     // A, B, and C is the original owner.
-    const originalOwners = [
-      ownerA.publicKey,
-      ownerB.publicKey,
-      ownerC.publicKey,
-    ];
+    const owners = [ownerA.publicKey, ownerB.publicKey, ownerC.publicKey];
     const threshold = new anchor.BN(2);
 
-    const tx = await program.rpc.initializeMultisig(originalOwners, threshold, nonce, {
+    const tx = await program.rpc.initializeMultisig(owners, threshold, bump, {
       accounts: {
         multisig: accountKeypair.publicKey,
       },
@@ -63,12 +59,12 @@ describe("anchor-multisig", () => {
 
     console.log("Multisig account had been created", tx);
 
-    // nonce should be strict equal, e.g. '==='
+    // bump should be strict equal, e.g. '==='
     //
-    // We can treat the `multisigAccount.nonce`
+    // We can treat the `multisigAccount.bump`
     // as the standard integer because it's u8.
     const got = await program.account.multisig.fetch(accountKeypair.publicKey);
-    expect(got.nonce).is.eql(nonce);
+    expect(got.bump).is.eql(bump);
     expect(got.threshold.eq(new anchor.BN(3)));
     expect(got.owners).is.eql(owners);
     expect(got.ownerSetSeqno).is.eql(0);
@@ -103,7 +99,7 @@ describe("anchor-multisig", () => {
 
     // Change the owner to A, B, and D, instead of D.
     const data = program.coder.instruction.encode("set_owners", {
-      owners: [ownerA, ownerB, ownerD],
+      owners: [ownerA.publicKey, ownerB.publicKey, ownerD.publicKey],
     });
 
     const tx = await program.rpc.initializeTransaction(
@@ -113,13 +109,13 @@ describe("anchor-multisig", () => {
       {
         accounts: {
           multisig: multisigKeypair.publicKey,
-          transaction: transaction.publicKey,
+          transaction: accountKeypair.publicKey,
           proposer: ownerA.publicKey,
         },
         instructions: [
           await program.account.transaction.createInstruction(
             accountKeypair,
-            accountSize,
+            accountSize
           ),
         ],
         signers: [transaction, ownerA],
