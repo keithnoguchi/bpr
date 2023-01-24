@@ -32,10 +32,12 @@ pub mod anchor_multisig {
         bump: u8,
     ) -> Result<()> {
         let multisig = &mut ctx.accounts.multisig;
+
         multisig.owners = owners;
         multisig.threshold = threshold;
         multisig.bump = bump;
         multisig.owner_set_seqno = 0;
+
         Ok(())
     }
 
@@ -54,7 +56,7 @@ pub mod anchor_multisig {
             .map(|key| key == ctx.accounts.proposer.key)
             .collect();
 
-        // Initialize the transaciton account.
+        // Initialize the transaction account.
         let tx = &mut ctx.accounts.transaction;
         tx.program_id = tx_program_id;
         tx.accounts = tx_accounts;
@@ -63,6 +65,20 @@ pub mod anchor_multisig {
         tx.multisig = ctx.accounts.multisig.key();
         tx.executed = false;
         tx.owner_set_seqno = ctx.accounts.multisig.owner_set_seqno;
+
+        Ok(())
+    }
+
+    pub fn approve(ctx: Context<Approve>) -> Result<()> {
+        let owner_index = ctx
+            .accounts
+            .multisig
+            .owners
+            .iter()
+            .position(|a| a == ctx.accounts.owner.key)
+            .ok_or(Error::InvalidOwner)?;
+
+        ctx.accounts.transaction.signers[owner_index] = true;
 
         Ok(())
     }
@@ -104,6 +120,20 @@ pub struct TransactionInfo {
     pub pubkey: Pubkey,
     pub is_signer: bool,
     pub is_writable: bool,
+}
+
+#[derive(Accounts)]
+pub struct Approve<'info> {
+    /// A multisig account to manage the transaction to.
+    #[account(constraint = multisig.owner_set_seqno == transaction.owner_set_seqno)]
+    multisig: Box<Account<'info, Multisig>>,
+
+    /// A transaction to approve.
+    #[account(mut, has_one = multisig)]
+    transaction: Box<Account<'info, Transaction>>,
+
+    /// One of the multisig owners.
+    owner: Signer<'info>,
 }
 
 #[derive(Accounts)]

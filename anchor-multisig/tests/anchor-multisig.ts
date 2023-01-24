@@ -16,8 +16,9 @@ describe("anchor-multisig", () => {
   const ownerD = anchor.web3.Keypair.generate();
   const ownerE = anchor.web3.Keypair.generate();
 
-  // Test multisig keypair.
+  // Test multisig and the transaction keypair.
   const multisigKeypair = anchor.web3.Keypair.generate();
+  const transactionKeypair = anchor.web3.Keypair.generate();
 
   // Get the bump for the PDA based on the multisig
   // address.  The bump is stored in the multisig
@@ -68,7 +69,7 @@ describe("anchor-multisig", () => {
     //
     // We don't need this huge account size and will
     // come back here for the proper sizing.
-    const accountKeypair = anchor.web3.Keypair.generate();
+    const accountKeypair = transactionKeypair;
     const accountSize = 1000;
 
     const accounts = [
@@ -125,5 +126,28 @@ describe("anchor-multisig", () => {
     assert.isNotTrue(got.signers[2]); // ownerC.
     assert.isNotTrue(got.executed);
     assert.strictEqual(got.ownerSetSeqno, 0);
+  });
+
+  it("Approves the transaction", async () => {
+    const accounts = {
+      multisig: multisigKeypair.publicKey,
+      transaction: transactionKeypair.publicKey,
+      owner: ownerB.publicKey,
+    };
+    const signers = [ownerB];
+
+    const tx = await program.rpc.approve({ accounts, signers });
+    console.log("Approve transaction succeeded", tx);
+
+    const got = await program.account.transaction.fetch(
+      transactionKeypair.publicKey
+    );
+
+    assert.isTrue(got.multisig.equals(multisigKeypair.publicKey));
+    assert.isTrue(got.programId.equals(program.programId));
+    assert.isTrue(got.signers[0]); // ownerB.
+    assert.isTrue(got.signers[1]); // ownerB.
+    assert.isNotTrue(got.signers[2]); // ownerC.
+    assert.isNotTrue(got.executed);
   });
 });
