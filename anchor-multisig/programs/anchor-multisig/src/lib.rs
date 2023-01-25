@@ -197,12 +197,12 @@ pub struct ExecuteTransaction<'info> {
     #[account(constraint = multisig.owner_set_seqno == transaction.owner_set_seqno)]
     multisig: Box<Account<'info, Multisig>>,
 
+    #[account(mut, has_one = multisig)]
+    transaction: Box<Account<'info, Transaction>>,
+
     /// CHECK: multisig_signer is a PDA program signer.  Data is never read or written to.
     #[account(seeds = [multisig.key().as_ref()], bump = multisig.bump)]
     multisig_signer: UncheckedAccount<'info>,
-
-    #[account(mut, has_one = multisig)]
-    transaction: Box<Account<'info, Transaction>>,
 }
 
 #[derive(Accounts)]

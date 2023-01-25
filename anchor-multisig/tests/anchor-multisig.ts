@@ -153,4 +153,46 @@ describe("anchor-multisig", () => {
     assert.isNotTrue(got.signers[2]); // ownerC.
     assert.isNotTrue(got.executed);
   });
+
+  it("Executes the transaction", async () => {
+    const tx = await program.rpc.executeTransaction({
+      accounts: {
+        multisig: multisigKeypair.publicKey,
+        multisigSigner,
+        transaction: transactionKeypair.publicKey,
+      },
+      remainingAccounts: program.instruction.setOwners
+        .accounts({
+          multisig: multisigKeypair.publicKey,
+          multisigSigner,
+        })
+        // Change the signer status on the vender signer since
+        // it's signed by the program, not the client...
+        .map((meta) => {
+          return meta.pubkey.equals(multisigSigner)
+            ? { ...meta, isSigner: false }
+            : meta;
+        })
+        .concat({
+          pubkey: program.programId,
+          isWritable: false,
+          isSigner: false,
+        }),
+    });
+    console.log("Execute transaction succeeded", tx);
+
+    // check the transaction which should be executed state.
+    let got = await program.account.transaction.fetch(
+      transactionKeypair.publicKey
+    );
+    assert.isTrue(got.executed);
+
+    // check the multisig account owners to be A, B, and D.
+    got = await program.account.multisig.fetch(
+      multisigKeypair.publicKey
+    );
+    assert.isTrue(got.owners[0].equals(ownerA.publicKey));
+    assert.isTrue(got.owners[1].equals(ownerB.publicKey));
+    assert.isTrue(got.owners[2].equals(ownerD.publicKey));
+  });
 });
