@@ -15,6 +15,7 @@
 use std::ops::Deref;
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program;
 use anchor_lang::solana_program::instruction::Instruction;
 
 declare_id!("EYg7btAzuDC6MoYeCN9YzZcWu3T25Xqt7SEhcTbdbnG2");
@@ -26,6 +27,9 @@ pub enum Error {
 
     #[msg("The transaction had been already executed.")]
     AlreadyExecuted,
+
+    #[msg("There is not enough signers approved.")]
+    NotEnoughSigners,
 }
 
 #[program]
@@ -91,6 +95,14 @@ pub mod anchor_multisig {
 
         ctx.accounts.transaction.signers[owner_index] = true;
 
+        Ok(())
+    }
+
+    pub fn execute_transaction(ctx: Context<ExecuteTransaction>) -> Result<()> {
+        if ctx.accounts.transaction.executed {
+            return Err(Error::AlreadyExecuted.into());
+        }
+
         // check if we have enough approvers.
         let approved = ctx
             .accounts
@@ -100,11 +112,19 @@ pub mod anchor_multisig {
             .filter(|&approved| *approved)
             .count() as u64;
         if approved < ctx.accounts.multisig.threshold {
-            return Ok(());
+            return Err(Error::NotEnoughSigners.into());
         }
 
         // Execute the transaction signed by the multisig.
-        let mut ix: Instruction = (*ctx.accounts.transaction).deref().into();
+        let ix: Instruction = (*ctx.accounts.transaction).deref().into();
+        let multisig_key = ctx.accounts.multisig.key();
+        let seeds = &[multisig_key.as_ref(), &[ctx.accounts.multisig.bump]];
+        let signer = &[&seeds[..]];
+        let accounts = ctx.remaining_accounts;
+
+        solana_program::program::invoke_signed(&ix, accounts, signer)?;
+
+        ctx.accounts.transaction.executed = true;
 
         Ok(())
     }
@@ -170,6 +190,19 @@ pub struct ApproveTransaction<'info> {
 
     /// One of the multisig owners.
     owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteTransaction<'info> {
+    #[account(constraint = multisig.owner_set_seqno == transaction.owner_set_seqno)]
+    multisig: Box<Account<'info, Multisig>>,
+
+    /// CHECK: multisig_signer is a PDA program signer.  Data is never read or written to.
+    #[account(seeds = [multisig.key().as_ref()], bump = multisig.bump)]
+    multisig_signer: UncheckedAccount<'info>,
+
+    #[account(mut, has_one = multisig)]
+    transaction: Box<Account<'info, Transaction>>,
 }
 
 #[derive(Accounts)]

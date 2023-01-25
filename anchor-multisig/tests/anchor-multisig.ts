@@ -85,7 +85,7 @@ describe("anchor-multisig", () => {
       },
     ];
 
-    // Change the owner to A, B, and D, instead of D.
+    // Change the owner to A, B, and D, instead of C.
     const data = program.coder.instruction.encode("set_owners", {
       owners: [ownerA.publicKey, ownerB.publicKey, ownerD.publicKey],
     });
