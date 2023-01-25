@@ -145,7 +145,7 @@ describe("anchor-multisig", () => {
 
     assert.isTrue(got.multisig.equals(multisigKeypair.publicKey));
     assert.isTrue(got.programId.equals(program.programId));
-    assert.isTrue(got.signers[0]); // ownerB.
+    assert.isTrue(got.signers[0]); // ownerA.
     assert.isTrue(got.signers[1]); // ownerB.
     assert.isNotTrue(got.signers[2]); // ownerC.
     assert.isNotTrue(got.executed);
