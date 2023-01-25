@@ -11,7 +11,11 @@
 //!
 //! [coral-xyz]: https://github.com/coral-xyz/multisig/blob/master/programs/multisig/src/lib.rs
 //! [anchor tests]: https://github.com/coral-xyz/anchor/blob/master/tests/multisig/programs/multisig/src/lib.rs
+
+use std::ops::Deref;
+
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::instruction::Instruction;
 
 declare_id!("EYg7btAzuDC6MoYeCN9YzZcWu3T25Xqt7SEhcTbdbnG2");
 
@@ -19,6 +23,9 @@ declare_id!("EYg7btAzuDC6MoYeCN9YzZcWu3T25Xqt7SEhcTbdbnG2");
 pub enum Error {
     #[msg("The given owner is not part of this multisig.")]
     InvalidOwner,
+
+    #[msg("The transaction had been already executed.")]
+    AlreadyExecuted,
 }
 
 #[program]
@@ -44,7 +51,7 @@ pub mod anchor_multisig {
     pub fn initialize_transaction(
         ctx: Context<InitializeTransaction>,
         tx_program_id: Pubkey,
-        tx_accounts: Vec<TransactionInfo>,
+        tx_accounts: Vec<TransactionMeta>,
         tx_data: Vec<u8>,
     ) -> Result<()> {
         // Signers vector, set `true` for the proposer.
@@ -70,6 +77,10 @@ pub mod anchor_multisig {
     }
 
     pub fn approve_transaction(ctx: Context<ApproveTransaction>) -> Result<()> {
+        if ctx.accounts.transaction.executed {
+            return Err(Error::AlreadyExecuted.into());
+        }
+
         let owner_index = ctx
             .accounts
             .multisig
@@ -79,6 +90,21 @@ pub mod anchor_multisig {
             .ok_or(Error::InvalidOwner)?;
 
         ctx.accounts.transaction.signers[owner_index] = true;
+
+        // check if we have enough approvers.
+        let approved = ctx
+            .accounts
+            .transaction
+            .signers
+            .iter()
+            .filter(|&approved| *approved)
+            .count() as u64;
+        if approved < ctx.accounts.multisig.threshold {
+            return Ok(());
+        }
+
+        // Execute the transaction signed by the multisig.
+        let mut ix: Instruction = (*ctx.accounts.transaction).deref().into();
 
         Ok(())
     }
@@ -116,10 +142,20 @@ pub struct InitializeTransaction<'info> {
 }
 
 #[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct TransactionInfo {
+pub struct TransactionMeta {
     pub pubkey: Pubkey,
     pub is_signer: bool,
     pub is_writable: bool,
+}
+
+impl From<&TransactionMeta> for AccountMeta {
+    fn from(tx: &TransactionMeta) -> Self {
+        if tx.is_writable {
+            Self::new(tx.pubkey, tx.is_signer)
+        } else {
+            Self::new_readonly(tx.pubkey, tx.is_signer)
+        }
+    }
 }
 
 #[derive(Accounts)]
@@ -163,7 +199,7 @@ pub struct Transaction {
     pub program_id: Pubkey,
 
     /// Accounts required for the transaction.
-    pub accounts: Vec<TransactionInfo>,
+    pub accounts: Vec<TransactionMeta>,
 
     /// Instruction data for the transaction.
     pub data: Vec<u8>,
@@ -177,4 +213,14 @@ pub struct Transaction {
 
     /// Owner set sequence number.
     pub owner_set_seqno: u32,
+}
+
+impl From<&Transaction> for Instruction {
+    fn from(tx: &Transaction) -> Self {
+        Self {
+            program_id: tx.program_id,
+            accounts: tx.accounts.iter().map(From::from).collect(),
+            data: tx.data.clone(),
+        }
+    }
 }

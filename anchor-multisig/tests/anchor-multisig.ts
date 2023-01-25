@@ -138,7 +138,7 @@ describe("anchor-multisig", () => {
 
     const tx = await program.rpc.approveTransaction({
       accounts,
-      signers
+      signers,
     });
     console.log("Approve transaction succeeded", tx);
 
