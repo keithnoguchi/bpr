@@ -136,7 +136,10 @@ describe("anchor-multisig", () => {
     };
     const signers = [ownerB];
 
-    const tx = await program.rpc.approve({ accounts, signers });
+    const tx = await program.rpc.approveTransaction({
+      accounts,
+      signers
+    });
     console.log("Approve transaction succeeded", tx);
 
     const got = await program.account.transaction.fetch(

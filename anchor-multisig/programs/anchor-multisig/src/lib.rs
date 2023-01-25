@@ -69,7 +69,7 @@ pub mod anchor_multisig {
         Ok(())
     }
 
-    pub fn approve(ctx: Context<Approve>) -> Result<()> {
+    pub fn approve_transaction(ctx: Context<ApproveTransaction>) -> Result<()> {
         let owner_index = ctx
             .accounts
             .multisig
@@ -123,7 +123,7 @@ pub struct TransactionInfo {
 }
 
 #[derive(Accounts)]
-pub struct Approve<'info> {
+pub struct ApproveTransaction<'info> {
     /// A multisig account to manage the transaction to.
     #[account(constraint = multisig.owner_set_seqno == transaction.owner_set_seqno)]
     multisig: Box<Account<'info, Multisig>>,
