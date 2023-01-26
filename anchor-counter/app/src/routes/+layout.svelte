@@ -1,7 +1,12 @@
 <script>
 	import { onMount } from 'svelte';
-	import { WalletProvider } from '@svelte-on-solana/wallet-adapter-ui';
-	import { AnchorConnectionProvider } from '@svelte-on-solana/wallet-adapter-anchor';
+	import {
+		WalletMultiButton,
+		WalletProvider
+	} from '@svelte-on-solana/wallet-adapter-ui';
+	import {
+		AnchorConnectionProvider
+	} from '@svelte-on-solana/wallet-adapter-anchor';
 	import idl from '../../../target/idl/anchor_counter.json';
 
 	const localStorageKey = 'walletAdapter';
@@ -22,7 +27,6 @@
 
 <WalletProvider { localStorageKey } { wallets } autoConnect />
 <AnchorConnectionProvider {network} {idl} />
+<WalletMultiButton />
 
-<div>
-	<slot />
-</div>
+<slot />
