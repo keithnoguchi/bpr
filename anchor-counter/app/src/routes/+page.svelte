@@ -30,11 +30,36 @@
 			console.log('Error: ', e);
 		}
 	}
+
+	async function increment() {
+		try {
+			const tx = await $workSpace
+				.program
+				.methods
+				.increment()
+				.accounts({
+					state: $workSpace.baseAccount.publicKey
+				})
+				.rpc();
+
+			console.log("Incremnted", tx);
+
+			const account = await $workSpace
+				.program
+				.account
+				.state
+				.fetch($workSpace.baseAccount.publicKey);
+			counter = account.count.toString();
+		} catch (e) {
+			console.log('Error: ', e);
+		}
+	}
 </script>
 
 {#if $walletStore?.connected}
 	{#if counter}
-		Counter is {counter}
+		<button on:click={increment}>Increment</button>
+		<p>{counter} count</p>
 	{:else}
 		<button on:click={initialize}>Initialize counter</button>
 	{/if}

@@ -29,4 +29,6 @@
 <AnchorConnectionProvider {network} {idl} />
 <WalletMultiButton />
 
-<slot />
+<div>
+	<slot />
+</div>
