@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { walletStore } from '@svelte-on-solana/wallet-adapter-core';
+	import { workSpace } from '@svelte-on-solana/wallet-adapter-anchor';
 </script>
 
 {#if $walletStore?.connected}
-	<p>yes, you have a wallet</p>
-{:else}
-	<p>oh, no</p>
+	<p>Your wallet address is {$walletStore.publicKey}</p>
+	<p>Counter's program ID is {$workSpace.program.programId}</p>
 {/if}
