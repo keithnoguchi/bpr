@@ -9,7 +9,7 @@ pub enum Error {
     TooManySigners,
 }
 
-/// A [`Multisig`] PDA account.
+/// A Multisig PDA account.
 #[account]
 pub struct Multisig {
     /// PDA bump of the account.
@@ -29,14 +29,34 @@ pub struct Multisig {
     ///
     /// Until it's fixed/handled, the actual value below.
     signers: [Pubkey; 11], // [Pubkey; Self::MAX_SIGNERS]
+
+    /// Pubkeys of the pending transactions.
+    txs: [Pubkey; 10], // [Pubkey; Self::MAX_TRANSACTIONS]
 }
 
 impl Multisig {
     /// A maximum signers allowed to managed by the account.
     const MAX_SIGNERS: usize = 11;
 
+    /// A maximum pending transactions.
+    const MAX_TRANSACTIONS: usize = 10;
+
     /// A space of the [`Multisig`] account.
-    const SPACE: usize = 8 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS;
+    const SPACE: usize = 8 + 1 + 1 + 1
+        + 32 * Self::MAX_SIGNERS
+        + 32 * Self::MAX_TRANSACTIONS;
+}
+
+/// A Transaction PDA account.
+pub struct Transaction {
+    /// A target program ID.
+    pub program_id: Pubkey,
+
+    /// Accounts for the the transaction.
+    pub accounts: Vec<AccountMeta>,
+
+    /// An instruction data.
+    pub data: Vec<u8>,
 }
 
 /// Accounts required for the [`anchor_multisig2::open`] instruction.
