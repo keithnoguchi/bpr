@@ -1,5 +1,6 @@
 {
     "scripts": {
+        "fmt": "cargo fmt && yarn lint:fix",
         "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
         "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
     },

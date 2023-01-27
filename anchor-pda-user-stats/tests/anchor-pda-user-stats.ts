@@ -6,7 +6,8 @@ describe("anchor-pda-user-stats", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
 
-  const program = anchor.workspace.AnchorPdaUserStats as Program<AnchorPdaUserStats>;
+  const program = anchor.workspace
+    .AnchorPdaUserStats as Program<AnchorPdaUserStats>;
 
   it("Is initialized!", async () => {
     // Add your test here.
