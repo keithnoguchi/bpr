@@ -1,3 +1,5 @@
+//! A multisig program.
+
 use anchor_lang::prelude::*;
 
 declare_id!("6ihHMp67G1RVdkSUC7ZgFccbLA5Ar19hn7wst11RjnQu");
@@ -48,15 +50,33 @@ impl Multisig {
 }
 
 /// A Transaction PDA account.
+#[account]
 pub struct Transaction {
     /// A target program ID.
     pub program_id: Pubkey,
 
     /// Accounts for the the transaction.
-    pub accounts: Vec<AccountMeta>,
+    pub accounts: Vec<TransactionMeta>,
 
     /// An instruction data.
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, AnchorSerialize, AnchorDeserialize)]
+pub struct TransactionMeta {
+    pubkey: Pubkey,
+    is_signer: bool,
+    is_writable: bool,
+}
+
+impl From<TransactionMeta> for AccountMeta {
+    fn from(meta: TransactionMeta) -> Self {
+        Self {
+            pubkey: meta.pubkey,
+            is_signer: meta.is_signer,
+            is_writable: meta.is_writable,
+        }
+    }
 }
 
 /// Accounts required for the [`anchor_multisig2::open`] instruction.
