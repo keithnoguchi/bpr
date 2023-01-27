@@ -1,0 +1,16 @@
+[features]
+seeds = false
+skip-lint = false
+[programs.localnet]
+anchor_multisig2 = "6ihHMp67G1RVdkSUC7ZgFccbLA5Ar19hn7wst11RjnQu"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+fmt = "cargo fmt && yarn lint:fix"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
