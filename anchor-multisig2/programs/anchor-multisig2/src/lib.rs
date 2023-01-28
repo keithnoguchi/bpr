@@ -13,6 +13,9 @@ pub enum Error {
     #[msg("Exceeding the maximum number of signers")]
     TooManySigners,
 
+    #[msg("Not enough signers to execute the transaction")]
+    NotEnoughSigners,
+
     #[msg("The transaction queue is full")]
     TransactionQueueFull,
 }
@@ -121,7 +124,7 @@ pub struct Enqueue<'info> {
     pub multisig: Account<'info, Multisig>,
 
     /// The transaction to be enqueued to the multisig account.
-    #[account(zero)]
+    #[account(zero, signer)]
     pub transaction: Box<Account<'info, Transaction>>,
 }
 
@@ -135,6 +138,7 @@ pub struct Close<'info> {
     /// The [`Multisig`] account to be closed.
     #[account(
         mut,
+        close = payer,
         seeds = [b"multisig", payer.key().as_ref()],
         bump
     )]
@@ -208,14 +212,22 @@ pub mod anchor_multisig2 {
         Ok(())
     }
 
+    /// Close the multisig account.
+    ///
+    /// It requires `m - 1` signers to approve this operation.
     pub fn close(ctx: Context<Close>) -> Result<()> {
+        /*
         let multisig = &mut ctx.accounts.multisig;
-        let lamports = multisig.to_account_info().lamports();
+        let signers = &ctx.remaining_accounts;
 
-        // transfer the lamports to close the [`Multisig`] PDA account.
-        let payer = &mut ctx.accounts.payer;
-        **payer.to_account_info().lamports.borrow_mut() += lamports;
-        **multisig.to_account_info().lamports.borrow_mut() -= lamports;
+        // We need at leat `m - 1` signers to approve
+        // this operation.
+        require_gte!(
+            signers.len() as u8,
+            multisig.m - 1,
+            Error::NotEnoughSigners,
+        );
+        */
 
         Ok(())
     }
