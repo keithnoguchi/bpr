@@ -35,12 +35,12 @@ describe("anchor-multisig2", () => {
     expect(account.bump).to.equal(bump);
     expect(account.m).to.equal(2);
     expect(account.n).to.equal(3);
-    expect(account.signers[0]).to.eql(payer.publicKey);
-    expect(account.signers[1]).to.eql(signerA.publicKey);
-    expect(account.signers[2]).to.eql(signerB.publicKey);
-    expect(account.signers.length).to.equal(11);
+    expect(account.signers).to.include.deep.members([
+      payer.publicKey, signerA.publicKey, signerB.publicKey
+    ]);
+    expect(account.signers).to.have.lengthOf(11);
     expect(account.txQueued).to.equal(0);
-    expect(account.txs.length).to.equal(10);
+    expect(account.txs).to.have.lengthOf(10);
 
     tx = await program.methods
       .close()

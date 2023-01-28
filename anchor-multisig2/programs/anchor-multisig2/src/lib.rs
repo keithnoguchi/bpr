@@ -1,8 +1,32 @@
 //! A multisig program.
 
+use std::collections::HashSet;
+
 use anchor_lang::prelude::*;
 
 declare_id!("6ihHMp67G1RVdkSUC7ZgFccbLA5Ar19hn7wst11RjnQu");
+
+/// Custom errors of the program.
+#[error_code]
+pub enum Error {
+    #[msg("Invalid signer is provided")]
+    InvalidSigner,
+
+    #[msg("Invalid transaction is provided")]
+    InvalidTransaction,
+
+    #[msg("At least two signers required")]
+    NotEnoughSigners,
+
+    #[msg("The threshold, m, is too high for the signers")]
+    ThresholdTooHigh,
+
+    #[msg("Too many signers for the multisig account")]
+    TooManySigners,
+
+    #[msg("The transaction queue is full")]
+    TransactionQueueFull,
+}
 
 /// A Multisig PDA account.
 #[account]
@@ -19,20 +43,17 @@ pub struct Multisig {
     /// Current queued transactions.
     tx_queued: u8,
 
-    /// [`Pubkey`] of the signers, representing
-    /// `n` part of `m/n` multisig.
-    ///
-    /// There is an anchor IDL issue to parse the const
-    /// value, e.g. Self::Multisig below.
-    ///
-    /// Until it's fixed/handled, the actual value below.
-    signers: [Pubkey; 11], // [Pubkey; Self::MAX_SIGNERS]
-
-    /// Pubkeys of the pending transactions.
+    /// An array of queued transactions.
     txs: [Pubkey; 10], // [Pubkey; Self::MAX_TRANSACTIONS]
+
+    /// An array of signer's Pubkey.
+    signers: [Pubkey; 11], // [Pubkey; Self::MAX_SIGNERS]
 }
 
 impl Multisig {
+    /// A minimum signers required for the account.
+    const MIN_SIGNERS: usize = 2;
+
     /// A maximum signers allowed to managed by the account.
     const MAX_SIGNERS: usize = 11;
 
@@ -154,22 +175,6 @@ pub struct Close<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Custom errors of the program.
-#[error_code]
-pub enum Error {
-    #[msg("Invalid signer is provided")]
-    InvalidSigner,
-
-    #[msg("Invalid transaction is provided")]
-    InvalidTransaction,
-
-    #[msg("Exceeding the maximum number of signers")]
-    TooManySigners,
-
-    #[msg("The transaction queue is full")]
-    TransactionQueueFull,
-}
-
 /// Program instructions.
 #[program]
 pub mod anchor_multisig2 {
@@ -177,20 +182,32 @@ pub mod anchor_multisig2 {
 
     /// Creates new Multisig account.
     pub fn open(ctx: Context<Open>, bump: u8, m: u8, signers: Vec<Pubkey>) -> Result<()> {
-        // The signers should be below the [`Multisig::MAX_SIGNERS`]
-        // as the payer is also added to the signers.
+        let multisig = &mut ctx.accounts.multisig;
+        let payer = &ctx.accounts.payer;
+
+        // Checks duplicate signers.
+        let mut signers: HashSet<_> = signers.into_iter().collect();
+        signers.insert(payer.key());
+
+        // Makes sure we have a valid number of sighers,
+        // as well as the valid threshold, m <= signers.len().
+        require_gte!(
+            signers.len(),
+            Multisig::MIN_SIGNERS,
+            Error::NotEnoughSigners
+        );
         require!(signers.len() < Multisig::MAX_SIGNERS, Error::TooManySigners);
+        let threshold = m as usize;
+        require_gte!(signers.len(), threshold, Error::ThresholdTooHigh);
 
         // Initializes the multisig PDA account.
-        let multisig = &mut ctx.accounts.multisig;
         multisig.bump = bump;
         multisig.m = m;
-        multisig.n = signers.len() as u8 + 1;
-        multisig.signers[0] = *ctx.accounts.payer.key;
+        multisig.n = signers.len() as u8;
         signers
             .into_iter()
             .enumerate()
-            .for_each(|(i, signers)| multisig.signers[i + 1] = signers);
+            .for_each(|(i, signer)| multisig.signers[i] = signer);
         multisig.tx_queued = 0;
 
         Ok(())
