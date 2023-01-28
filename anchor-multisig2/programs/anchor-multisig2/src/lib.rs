@@ -10,11 +10,11 @@ pub enum Error {
     #[msg("Invalid signer is provided")]
     InvalidSigner,
 
+    #[msg("Invalid transaction is provided")]
+    InvalidTransaction,
+
     #[msg("Exceeding the maximum number of signers")]
     TooManySigners,
-
-    #[msg("Not enough signers to execute the transaction")]
-    NotEnoughSigners,
 
     #[msg("The transaction queue is full")]
     TransactionQueueFull,
@@ -59,9 +59,15 @@ impl Multisig {
     const SPACE: usize = 8 + 1 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 32 * Self::MAX_TRANSACTIONS;
 }
 
-/// A Transaction PDA account.
+/// A Transaction account.
 #[account]
 pub struct Transaction {
+    /// A multisig account.
+    pub multisig: Pubkey,
+
+    /// Indices of the signers.
+    pub signers: [bool; 11],
+
     /// A target program ID.
     pub program_id: Pubkey,
 
@@ -128,6 +134,22 @@ pub struct Enqueue<'info> {
     pub transaction: Box<Account<'info, Transaction>>,
 }
 
+/// Approves the transaction managed under multisig account.
+#[derive(Accounts)]
+pub struct Approve<'info> {
+    /// The approver.
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// A multisig account the transaction had been queued.
+    #[account(mut)]
+    pub multisig: Box<Account<'info, Multisig>>,
+
+    /// A transaction to approve.
+    #[account(mut, has_one = multisig)]
+    pub transaction: Box<Account<'info, Transaction>>,
+}
+
 /// Accounts required for the [`anchor_multisig2::close`] instruction.
 #[derive(Accounts)]
 pub struct Close<'info> {
@@ -188,47 +210,79 @@ pub mod anchor_multisig2 {
 
         // The payer of the transaction should be one of
         // the Multisig account this transaction belongs to.
-        require!(
-            multisig.signers.contains(&payer.key()),
-            Error::InvalidSigner
-        );
+        let index = match multisig
+            .signers
+            .iter()
+            .position(|pubkey| *pubkey == payer.key())
+        {
+            None => return Err(Error::InvalidSigner.into()),
+            Some(index) => index,
+        };
 
         // The queue should not be full.
         let tx_queued = multisig.tx_queued as usize;
         require!(
             tx_queued < Multisig::MAX_TRANSACTIONS,
-            Error::TransactionQueueFull
+            Error::TransactionQueueFull,
         );
 
         // Initialize the transaction and enqueue
         // the tx pubkey to multisig account.
         let tx = &mut ctx.accounts.transaction;
+        tx.multisig = multisig.key();
         tx.program_id = tx_program_id;
         tx.accounts = tx_accounts;
         tx.data = tx_data;
+        tx.signers[index] = true;
         multisig.txs[tx_queued] = tx.key();
         multisig.tx_queued += 1;
 
         Ok(())
     }
 
-    /// Close the multisig account.
+    /// Approves transaction queued in Multisig account.
+    pub fn approve(ctx: Context<Approve>) -> Result<()> {
+        let multisig = &mut ctx.accounts.multisig;
+        let payer = &ctx.accounts.payer;
+
+        // The payer of the transaction should be one of
+        // the Multisig account this transaction belongs to.
+        let index = match multisig
+            .signers
+            .iter()
+            .position(|pubkey| *pubkey == payer.key())
+        {
+            None => return Err(Error::InvalidSigner.into()),
+            Some(index) => index,
+        };
+
+        // The transaction should be managed under the
+        // multisig account.
+        let tx = &mut ctx.accounts.transaction;
+        require!(multisig.txs.contains(&tx.key()), Error::InvalidTransaction);
+
+        // Nothing to do if it's already approved by the
+        // same signer.
+        if tx.signers[index] == true {
+            return Ok(());
+        }
+        tx.signers[index] = true;
+
+        // Counts the signers and executes the transaction
+        // if it got the enough signatures.
+        let signers = tx.signers.iter().filter(|&signer| *signer).count();
+        let threshold = multisig.m as usize;
+        if signers < threshold {
+            return Ok(());
+        }
+
+        Ok(())
+    }
+
+    /// Closes the multisig account.
     ///
     /// It requires `m - 1` signers to approve this operation.
-    pub fn close(ctx: Context<Close>) -> Result<()> {
-        /*
-        let multisig = &mut ctx.accounts.multisig;
-        let signers = &ctx.remaining_accounts;
-
-        // We need at leat `m - 1` signers to approve
-        // this operation.
-        require_gte!(
-            signers.len() as u8,
-            multisig.m - 1,
-            Error::NotEnoughSigners,
-        );
-        */
-
+    pub fn close(_ctx: Context<Close>) -> Result<()> {
         Ok(())
     }
 }
