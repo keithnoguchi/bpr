@@ -67,6 +67,40 @@ describe("anchor-multisig2", () => {
     // TransactionSignature is the type alias of string.
     expect(tx).to.be.a("string");
 
+    // Creates transfer instructions.
+    const ixA = web3.SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: signerA.publicKey,
+      lamports: 10,
+    });
+    console.log(ixA)
+
+    // Queue the transaction instruction.
+    const txKeypair = web3.Keypair.generate();
+    tx = await program.rpc.enqueue(
+      ixA.programId,
+      ixA.keys,
+      ixA.data,
+      {
+        accounts: {
+          payer: payer.publicKey,
+          multisig,
+          transaction: txKeypair.publicKey
+        },
+        instructions: [
+          web3.SystemProgram.createAccount({
+            fromPubkey: payer.publicKey,
+            lamports: web3.LAMPORTS_PER_SOL,
+            newAccountPubkey: txKeypair.publicKey,
+            programId: program.programId,
+            space: 300,
+          })
+        ],
+        signers: [payer, txKeypair],
+      }
+    );
+    console.log("enqueue tx", tx);
+
     tx = await program.methods
       .close()
       .accounts({ payer: payer.publicKey, multisig })
