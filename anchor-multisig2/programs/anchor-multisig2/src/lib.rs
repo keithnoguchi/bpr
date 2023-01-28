@@ -7,6 +7,9 @@ declare_id!("6ihHMp67G1RVdkSUC7ZgFccbLA5Ar19hn7wst11RjnQu");
 /// Custom errors of the program.
 #[error_code]
 pub enum Error {
+    #[msg("Invalid signer is provided")]
+    InvalidSigner,
+
     #[msg("Exceeding the maximum number of signers")]
     TooManySigners,
 }
@@ -169,8 +172,13 @@ pub mod anchor_multisig2 {
         tx_accounts: Vec<TransactionMeta>,
         tx_data: Vec<u8>,
     ) -> Result<()> {
-        let _multisig = &mut ctx.accounts.multisig;
-        todo!();
+        let multisig = &mut ctx.accounts.multisig;
+        let payer = &ctx.accounts.payer;
+
+        // Enqueue operation is only allowed for one of the signers
+        // of the multisig account.
+        require!(multisig.signers.contains(&payer.key()), Error::InvalidSigner);
+
         Ok(())
     }
 
