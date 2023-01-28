@@ -4,22 +4,6 @@ use anchor_lang::prelude::*;
 
 declare_id!("6ihHMp67G1RVdkSUC7ZgFccbLA5Ar19hn7wst11RjnQu");
 
-/// Custom errors of the program.
-#[error_code]
-pub enum Error {
-    #[msg("Invalid signer is provided")]
-    InvalidSigner,
-
-    #[msg("Invalid transaction is provided")]
-    InvalidTransaction,
-
-    #[msg("Exceeding the maximum number of signers")]
-    TooManySigners,
-
-    #[msg("The transaction queue is full")]
-    TransactionQueueFull,
-}
-
 /// A Multisig PDA account.
 #[account]
 pub struct Multisig {
@@ -59,7 +43,7 @@ impl Multisig {
     const SPACE: usize = 8 + 1 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 32 * Self::MAX_TRANSACTIONS;
 }
 
-/// A Transaction account.
+/// A transaction account managed by Multisig account.
 #[account]
 pub struct Transaction {
     /// A multisig account.
@@ -170,6 +154,23 @@ pub struct Close<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Custom errors of the program.
+#[error_code]
+pub enum Error {
+    #[msg("Invalid signer is provided")]
+    InvalidSigner,
+
+    #[msg("Invalid transaction is provided")]
+    InvalidTransaction,
+
+    #[msg("Exceeding the maximum number of signers")]
+    TooManySigners,
+
+    #[msg("The transaction queue is full")]
+    TransactionQueueFull,
+}
+
+/// Program instructions.
 #[program]
 pub mod anchor_multisig2 {
     use super::*;
