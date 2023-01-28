@@ -9,7 +9,7 @@ describe("anchor-multisig2", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.AnchorMultisig2 as Program<AnchorMultisig2>;
-  const payer = provider.wallet;
+  const payer = provider.wallet.payer;
   const signerA = web3.Keypair.generate();
   const signerB = web3.Keypair.generate();
   const signers = [signerA.publicKey, signerB.publicKey];
