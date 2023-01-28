@@ -12,18 +12,17 @@ describe("anchor-multisig2", () => {
   const payer = provider.wallet;
   const signerA = web3.Keypair.generate();
   const signerB = web3.Keypair.generate();
+  const signers = [signerA.publicKey, signerB.publicKey];
+
+  const [multisig, bump] = web3.PublicKey.findProgramAddressSync(
+    [anchor.utils.bytes.utf8.encode("multisig"), payer.publicKey.toBuffer()],
+    program.programId
+  );
+  console.log(
+    `Multisig: https://explorer.solana.com/address/${multisig}?cluster=custom&customUrl=http%3A%2F%2F127.0.0.1%3A8899`
+  );
 
   it("opens and closes the Multisig account", async () => {
-    const [multisig, bump] = web3.PublicKey.findProgramAddressSync(
-      [anchor.utils.bytes.utf8.encode("multisig"), payer.publicKey.toBuffer()],
-      program.programId
-    );
-    console.log(
-      `Multisig: https://explorer.solana.com/address/${multisig}?cluster=custom&customUrl=http%3A%2F%2F127.0.0.1%3A8899`
-    );
-
-    const signers = [signerA.publicKey, signerB.publicKey];
-
     let tx = await program.methods
       .open(bump, 2, signers)
       .accounts({ payer: payer.publicKey, multisig })
@@ -58,5 +57,21 @@ describe("anchor-multisig2", () => {
       error = e;
     }
     expect(error).to.be.an("error");
+  });
+
+  it("enqueues transactions", async () => {
+    let tx = await program.methods
+      .open(bump, 2, signers)
+      .accounts({ payer: payer.publicKey, multisig })
+      .rpc();
+    // TransactionSignature is the type alias of string.
+    expect(tx).to.be.a("string");
+
+    tx = await program.methods
+      .close()
+      .accounts({ payer: payer.publicKey, multisig })
+      .rpc();
+    // TransactionSignature is the type alias of string.
+    expect(tx).to.be.a("string");
   });
 });
