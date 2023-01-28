@@ -12,6 +12,9 @@ pub enum Error {
 
     #[msg("Exceeding the maximum number of signers")]
     TooManySigners,
+
+    #[msg("The transaction queue is full")]
+    TransactionQueueFull,
 }
 
 /// A Multisig PDA account.
@@ -25,6 +28,9 @@ pub struct Multisig {
 
     /// Number of signers in `signers` array.
     n: u8,
+
+    /// Current queued transactions.
+    tx_queued: u8,
 
     /// [`Pubkey`] of the signers, representing
     /// `n` part of `m/n` multisig.
@@ -47,7 +53,7 @@ impl Multisig {
     const MAX_TRANSACTIONS: usize = 10;
 
     /// A space of the [`Multisig`] account.
-    const SPACE: usize = 8 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 32 * Self::MAX_TRANSACTIONS;
+    const SPACE: usize = 8 + 1 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 32 * Self::MAX_TRANSACTIONS;
 }
 
 /// A Transaction PDA account.
@@ -158,6 +164,7 @@ pub mod anchor_multisig2 {
             .into_iter()
             .enumerate()
             .for_each(|(i, signers)| multisig.signers[i + 1] = signers);
+        multisig.tx_queued = 0;
 
         Ok(())
     }
@@ -175,9 +182,28 @@ pub mod anchor_multisig2 {
         let multisig = &mut ctx.accounts.multisig;
         let payer = &ctx.accounts.payer;
 
-        // Enqueue operation is only allowed for one of the signers
-        // of the multisig account.
-        require!(multisig.signers.contains(&payer.key()), Error::InvalidSigner);
+        // The payer of the transaction should be one of
+        // the Multisig account this transaction belongs to.
+        require!(
+            multisig.signers.contains(&payer.key()),
+            Error::InvalidSigner
+        );
+
+        // The queue should not be full.
+        let tx_queued = multisig.tx_queued as usize;
+        require!(
+            tx_queued < Multisig::MAX_TRANSACTIONS,
+            Error::TransactionQueueFull
+        );
+
+        // Initialize the transaction and enqueue
+        // the tx pubkey to multisig account.
+        let tx = &mut ctx.accounts.transaction;
+        tx.program_id = tx_program_id;
+        tx.accounts = tx_accounts;
+        tx.data = tx_data;
+        multisig.txs[tx_queued] = tx.key();
+        multisig.tx_queued += 1;
 
         Ok(())
     }
