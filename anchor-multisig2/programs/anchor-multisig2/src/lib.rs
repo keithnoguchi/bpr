@@ -44,9 +44,7 @@ impl Multisig {
     const MAX_TRANSACTIONS: usize = 10;
 
     /// A space of the [`Multisig`] account.
-    const SPACE: usize = 8 + 1 + 1 + 1
-        + 32 * Self::MAX_SIGNERS
-        + 32 * Self::MAX_TRANSACTIONS;
+    const SPACE: usize = 8 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 32 * Self::MAX_TRANSACTIONS;
 }
 
 /// A Transaction PDA account.
@@ -81,6 +79,7 @@ impl From<TransactionMeta> for AccountMeta {
 
 /// Accounts required for the [`anchor_multisig2::open`] instruction.
 #[derive(Accounts)]
+#[instruction(bump: u8)]
 pub struct Open<'info> {
     /// A [`Multisig`] account payer, as well as the signer
     /// of the [`Transaction`]s.
@@ -97,8 +96,24 @@ pub struct Open<'info> {
     )]
     pub multisig: Account<'info, Multisig>,
 
-    /// The SystemProgram to create a PDA account.
+    /// The SystemProgram to create a multisig PDA account.
     pub system_program: Program<'info, System>,
+}
+
+/// Accounts required for the [`anchor_multisig2::enqueue`] instruction to enqueue transaction.
+#[derive(Accounts)]
+pub struct Enqueue<'info> {
+    /// The payer of this enqueue operation.
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// The multisig account to be enqueued under.
+    #[account(mut)]
+    pub multisig: Account<'info, Multisig>,
+
+    /// The transaction to be enqueued to the multisig account.
+    #[account(zero)]
+    pub transaction: Box<Account<'info, Transaction>>,
 }
 
 /// Accounts required for the [`anchor_multisig2::close`] instruction.
@@ -116,7 +131,7 @@ pub struct Close<'info> {
     )]
     pub multisig: Account<'info, Multisig>,
 
-    /// The SystemProgram to transfer the `lamports`.
+    /// The SystemProgram to transfer the `lamports` back to.
     pub system_program: Program<'info, System>,
 }
 
@@ -124,13 +139,15 @@ pub struct Close<'info> {
 pub mod anchor_multisig2 {
     use super::*;
 
-    pub fn open(ctx: Context<Open>, m: u8, signers: Vec<Pubkey>) -> Result<()> {
+    /// Creates new Multisig account.
+    pub fn open(ctx: Context<Open>, bump: u8, m: u8, signers: Vec<Pubkey>) -> Result<()> {
         // The signers should be below the [`Multisig::MAX_SIGNERS`]
         // as the payer is also added to the signers.
         require!(signers.len() < Multisig::MAX_SIGNERS, Error::TooManySigners);
 
         // Initializes the multisig PDA account.
         let multisig = &mut ctx.accounts.multisig;
+        multisig.bump = bump;
         multisig.m = m;
         multisig.n = signers.len() as u8 + 1;
         multisig.signers[0] = *ctx.accounts.payer.key;
@@ -138,8 +155,22 @@ pub mod anchor_multisig2 {
             .into_iter()
             .enumerate()
             .for_each(|(i, signers)| multisig.signers[i + 1] = signers);
-        multisig.bump = *ctx.bumps.get("multisig").unwrap();
 
+        Ok(())
+    }
+
+    /// Enqueues new Transaction under the Multisig account.
+    ///
+    /// Once it's approved by [`approve`] instruction, it will
+    /// be executed with the required multiple signatures.
+    pub fn enqueue(
+        ctx: Context<Enqueue>,
+        tx_program_id: Pubkey,
+        tx_accounts: Vec<TransactionMeta>,
+        tx_data: Vec<u8>,
+    ) -> Result<()> {
+        let _multisig = &mut ctx.accounts.multisig;
+        todo!();
         Ok(())
     }
 

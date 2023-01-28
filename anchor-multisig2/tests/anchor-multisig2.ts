@@ -18,10 +18,14 @@ describe("anchor-multisig2", () => {
       [anchor.utils.bytes.utf8.encode("multisig"), payer.publicKey.toBuffer()],
       program.programId
     );
+    console.log(
+      `Multisig: https://explorer.solana.com/address/${multisig}?cluster=custom&customUrl=http%3A%2F%2F127.0.0.1%3A8899`
+    );
+
     const signers = [signerA.publicKey, signerB.publicKey];
 
     let tx = await program.methods
-      .open(2, signers)
+      .open(bump, 2, signers)
       .accounts({ payer: payer.publicKey, multisig })
       .rpc();
     // TransactionSignature is the type alias of string.
