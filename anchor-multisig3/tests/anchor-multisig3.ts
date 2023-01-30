@@ -49,7 +49,7 @@ describe("anchor-multisig3", () => {
     }
   });
 
-  it("Checks the multisig initial state", async () => {
+  it("Opens the account", async () => {
     const ms = await program.account.multisig.fetch(multisig);
     expect(ms.bump).to.equal(bump);
     expect(ms.m).to.equal(threshold);
@@ -59,6 +59,18 @@ describe("anchor-multisig3", () => {
     );
     expect(ms.signers).to.have.lengthOf(5);
     expect(ms.txs).to.have.lengthOf(0);
+  });
+
+  it("Funds 50 SOL to the account", async () => {
+    const before = await provider.connection.getBalance(multisig);
+    await program.methods
+      .fund(bump, new anchor.BN(50 * web3.LAMPORTS_PER_SOL))
+      .accounts({ funder: wallet.publicKey, multisig })
+      .signers([wallet.payer])
+      .rpc();
+
+    const lamports = await provider.connection.getBalance(multisig);
+    expect(lamports - before).to.equal(50 * web3.LAMPORTS_PER_SOL);
   });
 
   it("Closes the multisig account", async () => {
@@ -72,7 +84,7 @@ describe("anchor-multisig3", () => {
       await program.account.multisig.fetch(multisig);
       expect.fail("it should throw");
     } catch (e) {
-      expect(e.message).to.contain('Account does not exist');
+      expect(e.message).to.contain("Account does not exist");
     }
   });
 });

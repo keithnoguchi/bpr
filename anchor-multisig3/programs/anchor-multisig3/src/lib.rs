@@ -3,6 +3,8 @@
 use std::collections::HashSet;
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program::invoke;
+use anchor_lang::solana_program::system_instruction;
 
 declare_id!("3LuouAGwBeueVADEviTaKLsgwkrinvfXKCNKPWcmbAQX");
 
@@ -74,6 +76,21 @@ pub struct Open<'info> {
 
 #[derive(Accounts)]
 #[instruction(bump: u8)]
+pub struct Fund<'info> {
+    /// A funder of the account.
+    #[account(mut)]
+    pub funder: Signer<'info>,
+
+    /// A multisig account.
+    #[account(mut, seeds = [b"multisig", funder.key.as_ref()], bump)]
+    pub multisig: Box<Account<'info, Multisig>>,
+
+    /// The system program to make the transfer of the funds.
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(bump: u8)]
 pub struct Close<'info> {
     /// An original funder of the multisig account.
     #[account(mut)]
@@ -95,8 +112,10 @@ pub mod anchor_multisig3 {
         let multisig = &mut ctx.accounts.multisig;
         let funder = &ctx.accounts.funder;
 
-        // Checks duplicate signers.
+        // Drops the duplicate signers.
         let mut signers: HashSet<_> = signers.into_iter().collect();
+
+        // Make sure the funder is part of the signers.
         signers.insert(funder.key());
 
         // Makes sure we have a valid number of sighers,
@@ -118,6 +137,18 @@ pub mod anchor_multisig3 {
             .into_iter()
             .enumerate()
             .for_each(|(i, signer)| multisig.signers[i] = signer);
+
+        Ok(())
+    }
+
+    pub fn fund(ctx: Context<Fund>, _bump: u8, lamports: u64) -> Result<()> {
+        let multisig = &ctx.accounts.multisig;
+        let funder = &ctx.accounts.funder;
+
+        // CPI to transfer fund to the multisig account.
+        let ix = system_instruction::transfer(&funder.key(), &multisig.key(), lamports);
+        let accounts = [funder.to_account_info(), multisig.to_account_info()];
+        invoke(&ix, &accounts)?;
 
         Ok(())
     }
