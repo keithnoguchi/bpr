@@ -15,12 +15,16 @@ describe("anchor-multisig3", () => {
     program.programId
   );
 
-  const threshold = 2;
+  const threshold = 3;
   const signers = [];
   signers.push(wallet.payer);
   signers.push(web3.Keypair.generate());
   signers.push(web3.Keypair.generate());
+  signers.push(web3.Keypair.generate());
+  signers.push(web3.Keypair.generate());
   const payees = [];
+  payees.push(web3.Keypair.generate());
+  payees.push(web3.Keypair.generate());
   payees.push(web3.Keypair.generate());
   payees.push(web3.Keypair.generate());
   payees.push(web3.Keypair.generate());
@@ -54,6 +58,9 @@ describe("anchor-multisig3", () => {
     expect(ms.bump).to.equal(bump);
     expect(ms.m).to.equal(threshold);
     expect(ms.n).to.equal(signers.length);
+    for (let approved of ms.approved) {
+      expect(approved).to.be.false;
+    }
     expect(ms.signers).to.include.deep.members(
       signers.map((pair) => pair.publicKey)
     );

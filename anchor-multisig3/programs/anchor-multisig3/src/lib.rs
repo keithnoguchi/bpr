@@ -32,6 +32,9 @@ pub struct Multisig {
     /// A number of signers.
     n: u8,
 
+    /// An array of approved atatus.
+    approved: [bool; 5],
+
     /// An array of signers.
     signers: [Pubkey; 5],
 
@@ -50,7 +53,7 @@ impl Multisig {
     const MAX_TXS: usize = 100;
 
     /// A account space.
-    const SPACE: usize = 8 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 4 + 32 * Self::MAX_TXS;
+    const SPACE: usize = 8 + 1 + 1 + 1 + 33 * Self::MAX_SIGNERS + 4 + 32 * Self::MAX_TXS;
 }
 
 /// An initiated transfer transaction.
@@ -152,7 +155,10 @@ pub mod anchor_multisig3 {
             Multisig::MIN_SIGNERS,
             Error::NotEnoughSigners
         );
-        require!(signers.len() < Multisig::MAX_SIGNERS, Error::TooManySigners);
+        require!(
+            signers.len() <= Multisig::MAX_SIGNERS,
+            Error::TooManySigners
+        );
         let threshold = m as usize;
         require_gte!(signers.len(), threshold, Error::ThresholdTooHigh);
 
