@@ -47,10 +47,24 @@ impl Multisig {
     const MAX_SIGNERS: usize = 5;
 
     /// A maximum transactions to be queued.
-    const MAX_TXS: usize = 10;
+    const MAX_TXS: usize = 100;
 
     /// A account space.
     const SPACE: usize = 8 + 1 + 1 + 1 + 32 * Self::MAX_SIGNERS + 4 + 32 * Self::MAX_TXS;
+}
+
+/// An initiated transfer transaction.
+#[account]
+pub struct Transfer {
+    /// An initiator of the transfer, one of the multisig
+    /// signers.
+    initiator: Pubkey,
+
+    /// A recipient of the lamports.
+    recipient: Pubkey,
+
+    /// A lamports to transfer.
+    lamports: u64,
 }
 
 #[derive(Accounts)]
@@ -78,6 +92,8 @@ pub struct Open<'info> {
 #[instruction(bump: u8)]
 pub struct Fund<'info> {
     /// A funder of the account.
+    ///
+    /// The funding is only allowed by the multisig account creator.
     #[account(mut)]
     pub funder: Signer<'info>,
 
@@ -87,6 +103,17 @@ pub struct Fund<'info> {
 
     /// The system program to make the transfer of the funds.
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitiateTransfer<'info> {
+    /// An initiator of the fund transfer.
+    ///
+    /// It should be one of the signers of the multisig account.
+    pub initiator: Signer<'info>,
+
+    /// A multisig account to take fund from.
+    pub multisig: Box<Account<'info, Multisig>>,
 }
 
 #[derive(Accounts)]
