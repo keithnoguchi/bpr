@@ -41,7 +41,7 @@ describe("anchor-multisig3", () => {
     try {
       await program.methods
         .close(bump)
-        .accounts({ founder: wallet.publicKey, multisig })
+        .accounts({ funder: wallet.publicKey, multisig })
         .signers([wallet.payer])
         .rpc();
     } catch (_) {
@@ -59,5 +59,20 @@ describe("anchor-multisig3", () => {
     );
     expect(ms.signers).to.have.lengthOf(5);
     expect(ms.txs).to.have.lengthOf(0);
+  });
+
+  it("Closes the multisig account", async () => {
+    await program.methods
+      .close(bump)
+      .accounts({ funder: wallet.publicKey, multisig })
+      .signers([wallet.payer])
+      .rpc();
+
+    try {
+      await program.account.multisig.fetch(multisig);
+      expect.fail("it should throw");
+    } catch (e) {
+      expect(e.message).to.contain('Account does not exist');
+    }
   });
 });
