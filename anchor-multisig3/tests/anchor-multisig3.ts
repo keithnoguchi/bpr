@@ -23,16 +23,13 @@ describe("anchor-multisig3", () => {
   const threshold = 3;
   const signers = [];
   signers.push(wallet.payer);
-  signers.push(web3.Keypair.generate());
-  signers.push(web3.Keypair.generate());
-  signers.push(web3.Keypair.generate());
-  signers.push(web3.Keypair.generate());
+  for (let i = 0; i < 4; i++) {
+    signers.push(web3.Keypair.generate());
+  }
   const payees = [];
-  payees.push(web3.Keypair.generate());
-  payees.push(web3.Keypair.generate());
-  payees.push(web3.Keypair.generate());
-  payees.push(web3.Keypair.generate());
-  payees.push(web3.Keypair.generate());
+  for (let i = 0; i < 20; i++) {
+    payees.push(web3.Keypair.generate());
+  }
 
   before(async () => {
     // Make sure all the signers have enough SOL to
@@ -148,11 +145,11 @@ describe("anchor-multisig3", () => {
       .signers([wallet.payer])
       .rpc();
 
-    for (let index in signers) {
+    for (let index in payees) {
       const transfer = web3.Keypair.generate();
-      const lamports = 10000 * index * web3.LAMPORTS_PER_SOL;
+      const lamports = 100 * index * web3.LAMPORTS_PER_SOL;
       const lamportsBN = new anchor.BN(lamports);
-      const signer = signers[index];
+      const signer = signers[index % signers.length];
       const payee = payees[index];
       const tx = await program.methods
         .createTransfer(payee.publicKey, lamportsBN, fundBump)
@@ -169,7 +166,7 @@ describe("anchor-multisig3", () => {
     }
 
     const ms = await program.account.multisig.fetch(multisig);
-    expect(ms.transfers).to.have.lengthOf(signers.length);
+    expect(ms.transfers).to.have.lengthOf(payees.length);
     expect(ms.remainingFund.eq(new anchor.BN(remainingFund))).to.be.true;
   });
 
