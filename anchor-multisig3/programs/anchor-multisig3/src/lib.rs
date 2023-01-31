@@ -17,8 +17,8 @@ pub enum Error {
     #[msg("Multisig account is empty, please propose the transfer transaction")]
     EmptyAccount,
 
-    #[msg("Missing AccountInfo")]
-    MissingAccountInfo,
+    #[msg("Missing transfer recipient AccountInfo")]
+    MissingRecipientAccountInfo,
 
     #[msg("Fund account is not writable")]
     FundAccountNotWritable,
@@ -481,11 +481,11 @@ pub mod anchor_multisig3 {
             Some(signer_index) => signer_index,
         };
 
-        // Nothing to do in case it's already signed.
-        if multisig.signed[signer_index] {
-            return Ok(());
+        // Due to the single transaction limitation, we allow the multiple approval
+        // so that we take care of the transfer in batch.
+        if !multisig.signed[signer_index] {
+            multisig.signed[signer_index] = true;
         }
-        multisig.signed[signer_index] = true;
 
         // Checks the threshold.
         let signed = multisig.signed.iter().filter(|&signed| *signed).count() as u8;
@@ -493,22 +493,43 @@ pub mod anchor_multisig3 {
             return Ok(());
         }
 
-        // Executes the queued transfers.
-        let from = multisig_fund.to_account_info();
+        // Finds out the executable transactions.
+        let mut executable = Vec::new();
+        let mut remaining = Vec::new();
         for transfer_addr in &multisig.transfers {
-            let tx_info = match remaining_accounts.get(transfer_addr) {
-                None => return Err(Error::MissingAccountInfo.into()),
+            let transfer_info = match remaining_accounts.get(transfer_addr) {
                 Some(transfer) => transfer,
+                None => {
+                    remaining.push(*transfer_addr);
+                    continue;
+                }
             };
-            let mut tx_data_a = tx_info.try_borrow_mut_data()?;
-            let mut tx_data: &[u8] = tx_data_a.deref_mut();
-            let tx = Transfer::try_deserialize(&mut tx_data)?;
+            let mut ref_data = transfer_info.try_borrow_mut_data()?;
+            let mut transfer_data: &[u8] = ref_data.deref_mut();
+            let tx = Transfer::try_deserialize(&mut transfer_data)?;
             let to = match remaining_accounts.get(&tx.recipient) {
-                None => return Err(Error::MissingAccountInfo.into()),
+                None => return Err(Error::MissingRecipientAccountInfo.into()),
                 Some(recipient) => recipient,
             };
-            Multisig::transfer_fund(&multisig, &from, &to, tx.lamports, fund_bump)?;
+            executable.push((to, tx.lamports));
         }
+
+        // There is no executable account info.  Just returns the success.
+        //
+        // This is a case that the approver approved the multisig but didn't
+        // provide the account info.
+        if executable.is_empty() {
+            return Ok(());
+        }
+
+        // Executes the queued transfers.
+        let from = multisig_fund.to_account_info();
+        for (to, lamports) in executable {
+            Multisig::transfer_fund(&multisig, &from, &to, lamports, fund_bump)?;
+        }
+
+        // Update the remaining transfers.
+        multisig.transfers = remaining;
 
         Ok(())
     }

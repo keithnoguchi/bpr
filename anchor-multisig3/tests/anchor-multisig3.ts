@@ -242,7 +242,7 @@ describe("anchor-multisig3", () => {
     }
 
     ms = await program.account.multisig.fetch(multisig);
-    expect(ms.transfers).to.have.lengthOf(signers.length);
     expect(ms.signed.filter(Boolean)).to.have.lengthOf(3);
+    expect(ms.transfers).to.have.lengthOf(0);
   });
 });
