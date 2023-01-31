@@ -173,7 +173,7 @@ describe("anchor-multisig3", () => {
     expect(ms.remainingFund.eq(new anchor.BN(remainingFund))).to.be.true;
   });
 
-  it("Checks the approval", async () => {
+  it("Checks the approval and the transfer execution", async () => {
     let remainingFund = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
       .fund(new anchor.BN(remainingFund), bump, fundBump)

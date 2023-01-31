@@ -1,6 +1,7 @@
 //! A native SOL multisig wallet program.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::ops::DerefMut;
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::{invoke, invoke_signed};
@@ -15,6 +16,9 @@ pub enum Error {
 
     #[msg("Multisig account is empty, please propose the transfer transaction")]
     EmptyAccount,
+
+    #[msg("Missing AccountInfo")]
+    MissingAccountInfo,
 
     #[msg("Fund account is not writable")]
     FundAccountNotWritable,
@@ -145,10 +149,10 @@ impl Multisig {
     }
 
     /// Withdraw fund.
-    fn transfer_fund<'info>(
-        _multisig: &Account<'info, Self>,
-        from: &mut AccountInfo<'info>,
-        to: &mut AccountInfo<'info>,
+    fn transfer_fund<'a, 'b>(
+        _multisig: &Account<'a, Self>,
+        from: &AccountInfo<'a>,
+        to: &AccountInfo<'b>,
         lamports: u64,
         _bump: u8,
     ) -> Result<()> {
@@ -436,14 +440,10 @@ pub mod anchor_multisig3 {
         require_gte!(multisig.remaining_fund, lamports, Error::NotEnoughFund);
 
         // Giving back the rent fee to the creator.
+        let from = multisig_fund.to_account_info();
+        let to = creator.to_account_info();
         let rent = transfer.to_account_info().lamports();
-        Multisig::transfer_fund(
-            &multisig,
-            &mut multisig_fund.to_account_info(),
-            &mut creator.to_account_info(),
-            rent,
-            fund_bump,
-        )?;
+        Multisig::transfer_fund(&multisig, &from, &to, rent, fund_bump)?;
 
         // Initializes the transfer account, and
         // queue it under multisig account for the
@@ -461,7 +461,11 @@ pub mod anchor_multisig3 {
         let signer = &ctx.accounts.signer;
         let multisig = &mut ctx.accounts.multisig;
         let multisig_fund = &mut ctx.accounts.multisig_fund;
-        let remaining_accounts = ctx.remaining_accounts;
+        let remaining_accounts: HashMap<_, _> = ctx
+            .remaining_accounts
+            .iter()
+            .map(|account| (account.key, account))
+            .collect();
 
         // Validate the multisig fund account.
         Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
@@ -489,17 +493,22 @@ pub mod anchor_multisig3 {
             return Ok(());
         }
 
-        msg!("executes {} queued transactions!", multisig.transfers.len());
-
-        /*
-        let multisig_ai = &mut multisig_fund.to_account_info();
-        for transfer in multisig.transfers {
-            let lamports = transfer.lamports;
-            Multisig::transfer_fund(
-                &multisig,
-                multisig_ai,
+        // Executes the queued transfers.
+        let from = multisig_fund.to_account_info();
+        for transfer_addr in &multisig.transfers {
+            let tx_info = match remaining_accounts.get(transfer_addr) {
+                None => return Err(Error::MissingAccountInfo.into()),
+                Some(transfer) => transfer,
+            };
+            let mut tx_data_a = tx_info.try_borrow_mut_data()?;
+            let mut tx_data: &[u8] = tx_data_a.deref_mut();
+            let tx = Transfer::try_deserialize(&mut tx_data)?;
+            let to = match remaining_accounts.get(&tx.recipient) {
+                None => return Err(Error::MissingAccountInfo.into()),
+                Some(recipient) => recipient,
+            };
+            Multisig::transfer_fund(&multisig, &from, &to, tx.lamports, fund_bump)?;
         }
-        */
 
         Ok(())
     }
@@ -514,14 +523,10 @@ pub mod anchor_multisig3 {
 
         // Close the multisig fund account by transfering all the lamports
         // back to the funder.
+        let from = multisig_fund.to_account_info();
+        let to = funder.to_account_info();
         let lamports = multisig_fund.lamports();
-        Multisig::transfer_fund(
-            &multisig,
-            &mut multisig_fund.to_account_info(),
-            &mut funder.to_account_info(),
-            lamports,
-            fund_bump,
-        )?;
+        Multisig::transfer_fund(&multisig, &from, &to, lamports, fund_bump)?;
 
         Ok(())
     }
