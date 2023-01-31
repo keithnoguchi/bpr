@@ -27,7 +27,7 @@ describe("anchor-multisig3", () => {
     signers.push(web3.Keypair.generate());
   }
   const payees = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 10; i++) {
     payees.push(web3.Keypair.generate());
   }
 
@@ -145,12 +145,11 @@ describe("anchor-multisig3", () => {
       .signers([wallet.payer])
       .rpc();
 
-    for (let index in payees) {
+    for (const [index, payee] of payees.entries()) {
       const transfer = web3.Keypair.generate();
       const lamports = 100 * index * web3.LAMPORTS_PER_SOL;
       const lamportsBN = new anchor.BN(lamports);
       const signer = signers[index % signers.length];
-      const payee = payees[index];
       const tx = await program.methods
         .createTransfer(payee.publicKey, lamportsBN, fundBump)
         .accounts({
@@ -182,12 +181,11 @@ describe("anchor-multisig3", () => {
       .signers([wallet.payer])
       .rpc();
 
-    for (let index in signers) {
+    for (const [index, payee] of payees.entries()) {
       const transfer = web3.Keypair.generate();
-      const lamports = 10000 * index * web3.LAMPORTS_PER_SOL;
+      const lamports = 1000 * index * web3.LAMPORTS_PER_SOL;
       const lamportsBN = new anchor.BN(lamports);
-      const signer = signers[index];
-      const payee = payees[index];
+      const signer = signers[index % signers.length];
       const tx = await program.methods
         .createTransfer(payee.publicKey, lamportsBN, fundBump)
         .accounts({
@@ -201,12 +199,12 @@ describe("anchor-multisig3", () => {
     }
 
     let ms = await program.account.multisig.fetch(multisig);
-    expect(ms.transfers).to.have.lengthOf(signers.length);
+    expect(ms.transfers).to.have.lengthOf(payees.length);
     expect(ms.signed.filter((signed) => signed)).to.have.lengthOf(0);
 
     // We need both the transfer as well as the
-    // payee account information for all the approve
-    // transaction through remainingAccounts.
+    // payee account information to make the
+    // transfer executed.
     //
     // This should be abstructed by SDK.
     const remainingAccounts = payees
