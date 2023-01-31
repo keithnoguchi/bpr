@@ -10,6 +10,12 @@ declare_id!("3LuouAGwBeueVADEviTaKLsgwkrinvfXKCNKPWcmbAQX");
 
 #[error_code]
 pub enum Error {
+    #[msg("Multisig account is locked, either approve or close the account")]
+    LockedAccount,
+
+    #[msg("Multisig account is empty, please propose the transfer transaction")]
+    EmptyAccount,
+
     #[msg("Fund account is not writable")]
     FundAccountNotWritable,
 
@@ -62,8 +68,8 @@ pub struct Multisig {
     /// Remaining fund in lamports.
     remaining_fund: u64,
 
-    /// An array of approved atatus of the signers.
-    approved: [bool; 5],
+    /// An array of signed atatus of the signers.
+    signed: [bool; 5],
 
     /// An array of signers Pubkey.
     signers: [Pubkey; 5],
@@ -85,6 +91,16 @@ impl Multisig {
     /// A account space.
     const SPACE: usize =
         8 + 1 + 1 + 1 + 1 + 32 + 8 + 33 * Self::MAX_SIGNERS + 4 + 32 * Self::MAX_TXS;
+
+    /// Checks if the transfer queue is empty.
+    fn is_empty<'info>(multisig: &Account<'info, Self>) -> bool {
+        multisig.transfers.is_empty()
+    }
+
+    /// Checks if the account had been locked.
+    fn is_locked<'info>(multisig: &Account<'info, Self>) -> bool {
+        multisig.signed.iter().any(|signed| *signed)
+    }
 
     /// Validates the multisig fund account.
     fn validate_fund_account<'info>(
@@ -129,7 +145,7 @@ impl Multisig {
     }
 
     /// Withdraw fund.
-    fn withdraw_fund<'info>(
+    fn transfer_fund<'info>(
         _multisig: &Account<'info, Self>,
         from: &mut AccountInfo<'info>,
         to: &mut AccountInfo<'info>,
@@ -256,6 +272,36 @@ pub struct CreateTransfer<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Approves the multisig account.
+///
+/// Once one of the signer approves, the account is locked
+/// for the new transfer unless:
+///
+/// 1) Meets the m number of signers approval.
+/// 2) Closes the account.
+///
+/// In case of the 1 above, the account will be unlocked
+/// and starts to take a new transfer again.
+#[derive(Accounts)]
+pub struct Approve<'info> {
+    /// An approver of the current state of the multisg account.
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    /// A multisig state account.
+    #[account(mut)]
+    pub multisig: Box<Account<'info, Multisig>>,
+
+    /// A multisig fund account.
+    ///
+    /// CHECK: Checked by the handler.
+    #[account(mut)]
+    pub multisig_fund: UncheckedAccount<'info>,
+
+    /// The system program to create a transfer account.
+    pub system_program: Program<'info, System>,
+}
+
 #[derive(Accounts)]
 #[instruction(bump: u8)]
 pub struct Close<'info> {
@@ -325,9 +371,9 @@ pub mod anchor_multisig3 {
         multisig.multisig_fund = multisig_fund.key();
         multisig.remaining_fund = 0;
         multisig
-            .approved
+            .signed
             .iter_mut()
-            .for_each(|approved| *approved = false);
+            .for_each(|signed| *signed = false);
         signers.into_iter().enumerate().for_each(|(index, signer)| {
             multisig.signers[index] = signer;
         });
@@ -368,10 +414,13 @@ pub mod anchor_multisig3 {
         let multisig_fund = &mut ctx.accounts.multisig_fund;
         let transfer = &mut ctx.accounts.transfer;
 
+        // Checks if the account is locked.
+        require!(!Multisig::is_locked(&multisig), Error::LockedAccount);
+
         // Validate the multisig fund account.
         Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
 
-        // Checks the creator validity.
+        // Checks the creator.
         let creator_key = creator.key();
         let signers = &multisig.signers[..multisig.n as usize];
         require!(signers.contains(&creator_key), Error::InvalidSigner);
@@ -388,7 +437,7 @@ pub mod anchor_multisig3 {
 
         // Giving back the rent fee to the creator.
         let rent = transfer.to_account_info().lamports();
-        Multisig::withdraw_fund(
+        Multisig::transfer_fund(
             &multisig,
             &mut multisig_fund.to_account_info(),
             &mut creator.to_account_info(),
@@ -408,6 +457,53 @@ pub mod anchor_multisig3 {
         Ok(())
     }
 
+    pub fn approve(ctx: Context<Approve>, fund_bump: u8) -> Result<()> {
+        let signer = &ctx.accounts.signer;
+        let multisig = &mut ctx.accounts.multisig;
+        let multisig_fund = &mut ctx.accounts.multisig_fund;
+        let remaining_accounts = ctx.remaining_accounts;
+
+        // Validate the multisig fund account.
+        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+
+        // Nothing to approve.
+        require!(!Multisig::is_empty(&multisig), Error::EmptyAccount);
+
+        // Checks the signer.
+        let signer_key = signer.key();
+        let signers = &multisig.signers[..multisig.n as usize];
+        let signer_index = match signers.iter().position(|pubkey| *pubkey == signer_key) {
+            None => return Err(Error::InvalidSigner.into()),
+            Some(signer_index) => signer_index,
+        };
+
+        // Nothing to do in case it's already signed.
+        if multisig.signed[signer_index] {
+            return Ok(());
+        }
+        multisig.signed[signer_index] = true;
+
+        // Checks the threshold.
+        let signed = multisig.signed.iter().filter(|&signed| *signed).count() as u8;
+        if signed < multisig.m {
+            return Ok(());
+        }
+
+        msg!("executes {} queued transactions!", multisig.transfers.len());
+
+        /*
+        let multisig_ai = &mut multisig_fund.to_account_info();
+        for transfer in multisig.transfers {
+            let lamports = transfer.lamports;
+            Multisig::transfer_fund(
+                &multisig,
+                multisig_ai,
+        }
+        */
+
+        Ok(())
+    }
+
     pub fn close(ctx: Context<Close>, _bump: u8, fund_bump: u8) -> Result<()> {
         let funder = &mut ctx.accounts.funder;
         let multisig = &mut ctx.accounts.multisig;
@@ -419,7 +515,7 @@ pub mod anchor_multisig3 {
         // Close the multisig fund account by transfering all the lamports
         // back to the funder.
         let lamports = multisig_fund.lamports();
-        Multisig::withdraw_fund(
+        Multisig::transfer_fund(
             &multisig,
             &mut multisig_fund.to_account_info(),
             &mut funder.to_account_info(),

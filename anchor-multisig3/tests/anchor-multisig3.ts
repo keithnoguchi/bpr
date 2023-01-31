@@ -83,8 +83,8 @@ describe("anchor-multisig3", () => {
     const ms = await program.account.multisig.fetch(multisig);
     expect(ms.m).to.equal(threshold);
     expect(ms.n).to.equal(signers.length);
-    for (let approved of ms.approved) {
-      expect(approved).to.be.false;
+    for (let signed of ms.signed) {
+      expect(signed).to.be.false;
     }
     expect(ms.signers).to.include.deep.members(
       signers.map((pair) => pair.publicKey)
@@ -96,7 +96,26 @@ describe("anchor-multisig3", () => {
     expect(ms.multisigFund).to.deep.equal(multisigFund);
   });
 
-  it("Funds 1,000,000 SOL to the multisig account", async () => {
+  it("Checks the account closure", async () => {
+    await program.methods
+      .close(bump, fundBump)
+      .accounts({
+        funder: wallet.publicKey,
+        multisig,
+        multisigFund,
+      })
+      .signers([wallet.payer])
+      .rpc();
+
+    try {
+      await program.account.multisig.fetch(multisig);
+      expect.fail("it should throw");
+    } catch (e) {
+      expect(e.message).to.contain("Account does not exist");
+    }
+  });
+
+  it("Checks 1,000,000 SOL funding", async () => {
     const before = await provider.connection.getBalance(multisigFund);
     const lamports = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
@@ -117,7 +136,7 @@ describe("anchor-multisig3", () => {
     expect(balance - before).to.equal(lamports);
   });
 
-  it("Queues multiple transfer transactions", async () => {
+  it("Checks multiple queued transactions", async () => {
     let remainingFund = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
       .fund(new anchor.BN(remainingFund), bump, fundBump)
@@ -154,9 +173,10 @@ describe("anchor-multisig3", () => {
     expect(ms.remainingFund.eq(new anchor.BN(remainingFund))).to.be.true;
   });
 
-  it("Closes the multisig account", async () => {
+  it("Checks the approval", async () => {
+    let remainingFund = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .close(bump, fundBump)
+      .fund(new anchor.BN(remainingFund), bump, fundBump)
       .accounts({
         funder: wallet.publicKey,
         multisig,
@@ -165,11 +185,67 @@ describe("anchor-multisig3", () => {
       .signers([wallet.payer])
       .rpc();
 
-    try {
-      await program.account.multisig.fetch(multisig);
-      expect.fail("it should throw");
-    } catch (e) {
-      expect(e.message).to.contain("Account does not exist");
+    for (let index in signers) {
+      const transfer = web3.Keypair.generate();
+      const lamports = 10000 * index * web3.LAMPORTS_PER_SOL;
+      const lamportsBN = new anchor.BN(lamports);
+      const signer = signers[index];
+      const payee = payees[index];
+      const tx = await program.methods
+        .createTransfer(payee.publicKey, lamportsBN, fundBump)
+        .accounts({
+          creator: signer.publicKey,
+          multisig,
+          multisigFund,
+          transfer: transfer.publicKey,
+        })
+        .signers([signer, transfer])
+        .rpc();
     }
+
+    let ms = await program.account.multisig.fetch(multisig);
+    expect(ms.transfers).to.have.lengthOf(signers.length);
+    expect(ms.signed.filter((signed) => signed)).to.have.lengthOf(0);
+
+    // We need both the transfer as well as the
+    // payee account information for all the approve
+    // transaction through remainingAccounts.
+    //
+    // This should be abstructed by SDK.
+    const remainingAccounts = payees
+      .map((payee) => {
+        return {
+          pubkey: payee.publicKey,
+          isWritable: true,
+          isSigner: false,
+        };
+      })
+      .concat(
+        ms.transfers.map((transfer) => {
+          return {
+            pubkey: transfer,
+            isWritable: true,
+            isSigner: false,
+          };
+        })
+      );
+
+    // 3/3 approval.
+    for (let i = 0; i < 3; i++) {
+      await program.methods
+        .approve(fundBump)
+        .accounts({
+          signer: signers[i].publicKey,
+          multisig,
+          multisigFund,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([signers[i]])
+        .rpc();
+    }
+
+    ms = await program.account.multisig.fetch(multisig);
+    expect(ms.transfers).to.have.lengthOf(signers.length);
+    expect(ms.signed.filter(Boolean)).to.have.lengthOf(3);
   });
 });
