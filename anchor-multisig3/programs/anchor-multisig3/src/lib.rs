@@ -11,6 +11,9 @@ declare_id!("3LuouAGwBeueVADEviTaKLsgwkrinvfXKCNKPWcmbAQX");
 
 #[error_code]
 pub enum Error {
+    #[msg("Multisig queue is full")]
+    QueueFull,
+
     #[msg("Multisig account is locked, either approve or close the account")]
     LockedAccount,
 
@@ -32,8 +35,8 @@ pub enum Error {
     #[msg("Invalid fund account")]
     InvalidFundAddress,
 
-    #[msg("Not enough signers given")]
-    NotEnoughSigners,
+    #[msg("No signers provided")]
+    NoSigners,
 
     #[msg("Too many signers given")]
     TooManySigners,
@@ -46,9 +49,6 @@ pub enum Error {
 
     #[msg("There is not enough fund remains")]
     NotEnoughFund,
-
-    #[msg("Pending transfer is full")]
-    TransferQueueFull,
 }
 
 /// A multisig data account.
@@ -57,8 +57,8 @@ pub struct Multisig {
     /// A threshold.
     m: u8,
 
-    /// A number of signers.
-    n: u8,
+    /// A maximum depth of the transaction queue.
+    q: u8,
 
     /// A PDA bump of the account.
     bump: u8,
@@ -66,44 +66,70 @@ pub struct Multisig {
     /// A fund PDA account bump.
     fund_bump: u8,
 
-    /// A fund account, holding the native SOL.
-    multisig_fund: Pubkey,
-
     /// Remaining fund in lamports.
     remaining_fund: u64,
 
+    /// A fund account, holding the native SOL.
+    multisig_fund: Pubkey,
+
     /// An array of signed atatus of the signers.
-    signed: [bool; 5],
+    signed: Vec<bool>,
 
     /// An array of signers Pubkey.
-    signers: [Pubkey; 5],
+    signers: Vec<Pubkey>,
 
     /// An array of queued transactions.
-    transfers: Vec<Pubkey>,
+    queue: Vec<Pubkey>,
 }
 
 impl Multisig {
     /// A minimum signers.
-    const MIN_SIGNERS: usize = 2;
+    const MIN_SIGNERS: u8 = 1;
 
     /// A maximum signers.
-    const MAX_SIGNERS: usize = 5;
+    const MAX_SIGNERS: u8 = u8::MAX;
 
-    /// A maximum transfers queued under the multisig.
-    const MAX_TXS: usize = 100;
+    /// A maximum transaction queue.
+    const MIN_QUEUE: u8 = 1;
 
-    /// A account space.
-    const SPACE: usize =
-        8 + 1 + 1 + 1 + 1 + 32 + 8 + 33 * Self::MAX_SIGNERS + 4 + 32 * Self::MAX_TXS;
+    /// A maximum transaction queue.
+    const MAX_QUEUE: u8 = u8::MAX;
+
+    fn space(signers: &[Pubkey], q: u8) -> usize {
+        let n = Self::valid_n(signers.len() as u8) as usize;
+        let q = Self::valid_q(q) as usize;
+        8 + 1 + 1 + 1 + 1 + 8 + 32 + 4 + n + 4 + 32 * n + 4 + 32 * q
+    }
+
+    /// Returns the valid n, number of signers.
+    fn valid_n(n: u8) -> u8 {
+        n.min(Self::MAX_SIGNERS).max(Self::MIN_SIGNERS)
+    }
+
+    /// Returns the valid q, queue length.
+    fn valid_q(q: u8) -> u8 {
+        q.min(Self::MAX_QUEUE).max(Self::MIN_QUEUE)
+    }
 
     /// Checks if the transfer queue is empty.
     fn is_empty<'info>(multisig: &Account<'info, Self>) -> bool {
-        multisig.transfers.is_empty()
+        multisig.queue.is_empty()
+    }
+
+    /// Check if the multisig queue is full.
+    fn is_full<'info>(multisig: &Account<'info, Self>) -> bool {
+        multisig.queue.len() == multisig.q as usize
     }
 
     /// Checks if the account had been locked.
     fn is_locked<'info>(multisig: &Account<'info, Self>) -> bool {
         multisig.signed.iter().any(|signed| *signed)
+    }
+
+    /// Validates the multisig queue.
+    fn validate_queue<'info>(multisig: &Account<'info, Self>) -> Result<()> {
+        require!(!Self::is_full(multisig), Error::QueueFull);
+        Ok(())
     }
 
     /// Validates the multisig fund account.
@@ -200,7 +226,7 @@ impl Transfer {
 }
 
 #[derive(Accounts)]
-#[instruction(bump: u8)]
+#[instruction(m: u8, signers: Vec<Pubkey>, q: u8, bump: u8, bump_fund: u8)]
 pub struct Create<'info> {
     /// A funder of the multisig account.
     #[account(mut)]
@@ -210,7 +236,7 @@ pub struct Create<'info> {
     #[account(
         init,
         payer = funder,
-        space = Multisig::SPACE,
+        space = Multisig::space(&signers, q),
         seeds = [b"multisig", funder.key.as_ref()],
         bump,
     )]
@@ -339,6 +365,7 @@ pub mod anchor_multisig3 {
         ctx: Context<Create>,
         m: u8,
         signers: Vec<Pubkey>,
+        q: u8,
         bump: u8,
         fund_bump: u8,
     ) -> Result<()> {
@@ -349,18 +376,19 @@ pub mod anchor_multisig3 {
         // Validate the multisig fund account.
         Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
 
-        // Checks the signers.
-        let mut signers: HashSet<_> = signers.into_iter().collect();
-        signers.insert(funder.key());
+        // Checks the uniqueness of signer's address.
+        let signers: HashSet<_> = signers.into_iter().collect();
         require_gte!(
             signers.len(),
-            Multisig::MIN_SIGNERS,
-            Error::NotEnoughSigners
+            Multisig::MIN_SIGNERS as usize,
+            Error::NoSigners,
         );
-        require!(
-            signers.len() <= Multisig::MAX_SIGNERS,
+        require_gte!(
+            Multisig::MAX_SIGNERS as usize,
+            signers.len(),
             Error::TooManySigners
         );
+
         let threshold = m as usize;
         require_gte!(signers.len(), threshold, Error::ThresholdTooHigh);
 
@@ -369,18 +397,13 @@ pub mod anchor_multisig3 {
 
         // Initializes the multisig state account.
         multisig.m = m;
-        multisig.n = signers.len() as u8;
+        multisig.q = Multisig::valid_q(q);
         multisig.bump = bump;
         multisig.fund_bump = fund_bump;
         multisig.multisig_fund = multisig_fund.key();
         multisig.remaining_fund = 0;
-        multisig
-            .signed
-            .iter_mut()
-            .for_each(|signed| *signed = false);
-        signers.into_iter().enumerate().for_each(|(index, signer)| {
-            multisig.signers[index] = signer;
-        });
+        multisig.signed = vec![false; signers.len()];
+        multisig.signers = signers.into_iter().collect();
 
         Ok(())
     }
@@ -426,15 +449,11 @@ pub mod anchor_multisig3 {
 
         // Checks the creator.
         let creator_key = creator.key();
-        let signers = &multisig.signers[..multisig.n as usize];
+        let signers = &multisig.signers;
         require!(signers.contains(&creator_key), Error::InvalidSigner);
 
         // Check the current transfer queue.
-        require_gt!(
-            Multisig::MAX_TXS,
-            multisig.transfers.len(),
-            Error::TransferQueueFull
-        );
+        Multisig::validate_queue(&multisig)?;
 
         // Checks the multisig fund balance.
         require_gte!(multisig.remaining_fund, lamports, Error::NotEnoughFund);
@@ -451,7 +470,7 @@ pub mod anchor_multisig3 {
         transfer.creator = creator_key;
         transfer.recipient = recipient;
         transfer.lamports = lamports;
-        multisig.transfers.push(transfer.key());
+        multisig.queue.push(transfer.key());
         multisig.remaining_fund -= lamports;
 
         Ok(())
@@ -475,7 +494,7 @@ pub mod anchor_multisig3 {
 
         // Checks the signer.
         let signer_key = signer.key();
-        let signers = &multisig.signers[..multisig.n as usize];
+        let signers = &multisig.signers;
         let signer_index = match signers.iter().position(|pubkey| *pubkey == signer_key) {
             None => return Err(Error::InvalidSigner.into()),
             Some(signer_index) => signer_index,
@@ -496,7 +515,7 @@ pub mod anchor_multisig3 {
         // Finds out the executable transactions.
         let mut executable = Vec::new();
         let mut remaining = Vec::new();
-        for transfer_addr in &multisig.transfers {
+        for transfer_addr in &multisig.queue {
             let transfer_info = match remaining_accounts.get(transfer_addr) {
                 Some(transfer) => transfer,
                 None => {
@@ -529,7 +548,7 @@ pub mod anchor_multisig3 {
         }
 
         // Update the remaining transfers.
-        multisig.transfers = remaining;
+        multisig.queue = remaining;
 
         Ok(())
     }

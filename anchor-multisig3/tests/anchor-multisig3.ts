@@ -20,12 +20,16 @@ describe("anchor-multisig3", () => {
     program.programId
   );
 
+  // 3/5 multisig with 100 max transaction queue.
   const threshold = 3;
   const signers = [];
   signers.push(wallet.payer);
   for (let i = 0; i < 4; i++) {
     signers.push(web3.Keypair.generate());
   }
+  const queueDepth = 100;
+
+  // 10 different payees.
   const payees = [];
   for (let i = 0; i < 10; i++) {
     payees.push(web3.Keypair.generate());
@@ -48,8 +52,9 @@ describe("anchor-multisig3", () => {
       .create(
         threshold,
         signers.map((pair) => pair.publicKey),
+        queueDepth,
         bump,
-        fundBump
+        fundBump,
       )
       .accounts({
         funder: wallet.publicKey,
@@ -79,18 +84,18 @@ describe("anchor-multisig3", () => {
   it("Checks the multisig account state", async () => {
     const ms = await program.account.multisig.fetch(multisig);
     expect(ms.m).to.equal(threshold);
-    expect(ms.n).to.equal(signers.length);
-    for (let signed of ms.signed) {
-      expect(signed).to.be.false;
-    }
-    expect(ms.signers).to.include.deep.members(
-      signers.map((pair) => pair.publicKey)
-    );
-    expect(ms.signers).to.have.lengthOf(5);
-    expect(ms.transfers).to.have.lengthOf(0);
+    expect(ms.q).to.equal(queueDepth);
     expect(ms.bump).to.equal(bump);
     expect(ms.fundBump).to.equal(fundBump);
     expect(ms.multisigFund).to.deep.equal(multisigFund);
+    expect(ms.signers).to.have.lengthOf(signers.length);
+    expect(ms.signers).to.include.deep.members(
+      signers.map((pair) => pair.publicKey)
+    );
+    for (let signed of ms.signed) {
+      expect(signed).to.be.false;
+    }
+    expect(ms.queue).to.have.lengthOf(0);
   });
 
   it("Checks the account closure", async () => {
@@ -165,7 +170,7 @@ describe("anchor-multisig3", () => {
     }
 
     const ms = await program.account.multisig.fetch(multisig);
-    expect(ms.transfers).to.have.lengthOf(payees.length);
+    expect(ms.queue).to.have.lengthOf(payees.length);
     expect(ms.remainingFund.eq(new anchor.BN(remainingFund))).to.be.true;
   });
 
@@ -199,7 +204,7 @@ describe("anchor-multisig3", () => {
     }
 
     let ms = await program.account.multisig.fetch(multisig);
-    expect(ms.transfers).to.have.lengthOf(payees.length);
+    expect(ms.queue).to.have.lengthOf(payees.length);
     expect(ms.signed.filter((signed) => signed)).to.have.lengthOf(0);
 
     // We need both the transfer as well as the
@@ -216,7 +221,7 @@ describe("anchor-multisig3", () => {
         };
       })
       .concat(
-        ms.transfers.map((transfer) => {
+        ms.queue.map((transfer) => {
           return {
             pubkey: transfer,
             isWritable: true,
@@ -241,6 +246,6 @@ describe("anchor-multisig3", () => {
 
     ms = await program.account.multisig.fetch(multisig);
     expect(ms.signed.filter(Boolean)).to.have.lengthOf(3);
-    expect(ms.transfers).to.have.lengthOf(0);
+    expect(ms.queue).to.have.lengthOf(0);
   });
 });
