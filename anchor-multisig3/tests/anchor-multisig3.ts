@@ -67,6 +67,15 @@ describe("anchor-multisig3", () => {
 
   afterEach(async () => {
     try {
+      const ms = await program.account.state.fetch(state);
+      const remainingAccounts = ms.queue.map((transfer) => {
+        return {
+          pubkey: transfer,
+          isWritable: true,
+          isSigner: false,
+        };
+      });
+
       await program.methods
         .close(stateBump, fundBump)
         .accounts({
@@ -74,11 +83,10 @@ describe("anchor-multisig3", () => {
           state,
           fund,
         })
+        .remainingAccounts(remainingAccounts)
         .signers([wallet.payer])
         .rpc();
-    } catch (_e) {
-      // ignore the error.
-    }
+    } catch (e) {}
   });
 
   it("Checks the multisig state account state", async () => {

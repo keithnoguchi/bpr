@@ -173,10 +173,10 @@ impl State {
     }
 
     /// Withdraw fund.
-    fn transfer_fund<'a, 'b>(
+    fn transfer_fund<'a, 'b, 'c>(
         _state: &Account<'a, Self>,
-        from: &AccountInfo<'a>,
-        to: &AccountInfo<'b>,
+        from: &AccountInfo<'b>,
+        to: &AccountInfo<'c>,
         lamports: u64,
         _bump: u8,
     ) -> Result<()> {
@@ -424,6 +424,10 @@ pub mod anchor_multisig3 {
         Ok(())
     }
 
+    /// Creates a queued transfer lamports to the recipient.
+    ///
+    /// Transfer account creation fee will be given back to the
+    /// creator of the transfer from the multisig fund.
     pub fn create_transfer(
         ctx: Context<CreateTransfer>,
         recipient: Pubkey,
@@ -470,6 +474,8 @@ pub mod anchor_multisig3 {
         Ok(())
     }
 
+    /// Approves the transactions and executes the transfer
+    /// in case m approvals are met.
     pub fn approve(ctx: Context<Approve>, fund_bump: u8) -> Result<()> {
         let signer = &ctx.accounts.signer;
         let state = &mut ctx.accounts.state;
@@ -524,7 +530,7 @@ pub mod anchor_multisig3 {
                 None => return Err(Error::MissingRecipientAccountInfo.into()),
                 Some(recipient) => recipient,
             };
-            executable.push((to, tx.lamports));
+            executable.push((transfer_info, to, tx.lamports));
         }
 
         // There is no executable account info.  Just returns the success.
@@ -536,12 +542,15 @@ pub mod anchor_multisig3 {
         }
 
         // Executes the queued transfers.
-        let from = fund.to_account_info();
-        for (to, lamports) in executable {
-            State::transfer_fund(&state, &from, &to, lamports, fund_bump)?;
+        let fund = fund.to_account_info();
+        for (transfer, to, lamports) in executable {
+            // Fund to the recipient and closes the transfer account.
+            State::transfer_fund(&state, &fund, &to, lamports, fund_bump)?;
+            let lamports = transfer.lamports();
+            State::transfer_fund(&state, &transfer, &fund, lamports, fund_bump)?;
         }
 
-        // Update the remaining transfers.
+        // Update the queue.
         state.queue = remaining;
 
         // Reset the signed status once the queue is empty.
@@ -552,15 +561,36 @@ pub mod anchor_multisig3 {
         Ok(())
     }
 
+    /// Closes a multisig account.
+    ///
+    /// It cleans up all the remaining accounts and return back to the
+    /// funder.
     pub fn close(ctx: Context<Close>, _state_bump: u8, fund_bump: u8) -> Result<()> {
         let funder = &mut ctx.accounts.funder;
         let state = &mut ctx.accounts.state;
         let fund = &mut ctx.accounts.fund;
+        let remaining_accounts: HashMap<_, _> = ctx
+            .remaining_accounts
+            .iter()
+            .map(|account| (account.key, account))
+            .collect();
 
         // Validate the multisig fund account.
         State::validate_fund(&state, &fund, fund_bump)?;
 
-        // Close the multisig fund account by transfering all the lamports
+        // Closes the transfer accounts by transfering the
+        // rent fee back to the fund account.
+        let to = fund.to_account_info();
+        for transfer_addr in &state.queue {
+            let from = match remaining_accounts.get(transfer_addr) {
+                Some(transfer) => transfer,
+                None => continue,
+            };
+            let lamports = from.lamports();
+            State::transfer_fund(&state, &from, &to, lamports, fund_bump)?;
+        }
+
+        // Closes the multisig fund account by transfering all the lamports
         // back to the funder.
         let from = fund.to_account_info();
         let to = funder.to_account_info();
