@@ -142,8 +142,8 @@ impl State {
         if !fund.data_is_empty() {
             Err(Error::FundAccountIsNotEmpty)?;
         }
-        let multisig_key = state.key();
-        let seed = [b"fund", multisig_key.as_ref(), &[bump]];
+        let state_key = state.key();
+        let seed = [b"fund", state_key.as_ref(), &[bump]];
         let pda = match Pubkey::create_program_address(&seed, &id()) {
             Err(_e) => Err(Error::InvalidFundBumpSeed)?,
             Ok(pda) => pda,
@@ -162,9 +162,9 @@ impl State {
     ) -> Result<()> {
         let lamports = Rent::get()?.minimum_balance(0);
         let ix = system_instruction::create_account(&funder.key(), &fund.key(), lamports, 0, &id());
-        let multisig_key = state.key();
+        let state_key = state.key();
         let accounts = [funder.to_account_info(), fund.to_account_info()];
-        let seed = [b"fund", multisig_key.as_ref(), &[bump]];
+        let seed = [b"fund", state_key.as_ref(), &[bump]];
 
         // CPI.
         invoke_signed(&ix, &accounts, &[&seed])?;
@@ -190,8 +190,8 @@ impl State {
         /*
         let ix = system_instruction::transfer(from.key, &to.key, lamports);
         let accounts = [from, to];
-        let multisig_key = state.key();
-        let seed = [b"fund", multisig_key.as_ref(), &[bump]];
+        let state_key = state.key();
+        let seed = [b"fund", state_key.as_ref(), &[bump]];
         invoke_signed(
             &ix,
             &accounts,

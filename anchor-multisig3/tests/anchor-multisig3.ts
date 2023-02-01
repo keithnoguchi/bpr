@@ -2,6 +2,7 @@ import * as anchor from "@project-serum/anchor";
 import { web3, Program } from "@project-serum/anchor";
 import { AnchorMultisig3 } from "../target/types/anchor_multisig3";
 import { expect } from "chai";
+const { Keypair, PublicKey, LAMPORTS_PER_SOL } = web3;
 
 describe("anchor-multisig3", () => {
   // Configure the client to use the local cluster.
@@ -11,11 +12,11 @@ describe("anchor-multisig3", () => {
   // Prepares for the multisig PDAs.
   const program = anchor.workspace.AnchorMultisig3 as Program<AnchorMultisig3>;
   const wallet = provider.wallet;
-  const [state, stateBump] = web3.PublicKey.findProgramAddressSync(
+  const [state, stateBump] = PublicKey.findProgramAddressSync(
     [anchor.utils.bytes.utf8.encode("state"), wallet.publicKey.toBuffer()],
     program.programId
   );
-  const [fund, fundBump] = web3.PublicKey.findProgramAddressSync(
+  const [fund, fundBump] = PublicKey.findProgramAddressSync(
     [anchor.utils.bytes.utf8.encode("fund"), state.toBuffer()],
     program.programId
   );
@@ -23,25 +24,27 @@ describe("anchor-multisig3", () => {
   // 3/5 multisig with 100 max transaction queue.
   const threshold = 3;
   const signers = [];
-  signers.push(wallet.payer);
-  for (let i = 0; i < 4; i++) {
-    signers.push(web3.Keypair.generate());
+  for (let i = 0; i < 5; i++) {
+    signers.push(Keypair.generate());
   }
   const queueDepth = 100;
 
   // 10 different payees.
   const payees = [];
   for (let i = 0; i < 10; i++) {
-    payees.push(web3.Keypair.generate());
+    payees.push(Keypair.generate());
   }
 
   before(async () => {
-    // Make sure all the signers have enough SOL to
+    // Make sure all the signers have some SOL to
     // create transfers.
+    //
+    // Though, they won't pay any fee, e.g. tx creation,
+    // unless they are the payer of the transaction itself.
     for (let signer of signers) {
       const tx = await provider.connection.requestAirdrop(
         signer.publicKey,
-        1 * web3.LAMPORTS_PER_SOL
+        1 * LAMPORTS_PER_SOL
       );
       await provider.connection.confirmTransaction(tx);
     }
@@ -66,6 +69,9 @@ describe("anchor-multisig3", () => {
   });
 
   afterEach(async () => {
+    // Since we use the PDA based on the wallet pubkey,
+    // we need to close the account in every test, or
+    // it interfears the later tests.
     try {
       const ms = await program.account.state.fetch(state);
       const remainingAccounts = ms.queue.map((transfer) => {
@@ -86,7 +92,21 @@ describe("anchor-multisig3", () => {
         .remainingAccounts(remainingAccounts)
         .signers([wallet.payer])
         .rpc();
+    } catch (e) {
+      // ignore the close error.
+    }
+
+    // Make sure the multisig account is closed.
+    try {
+      await provider.connection.getBalance(fund);
+      expect.fail("the multisig fund account should be closed.");
     } catch (e) {}
+
+    // Makes sure the signer doesn't pay any lamports.
+    for (const signer of signers) {
+      const balance = await provider.connection.getBalance(signer.publicKey);
+      expect(balance).to.equal(1 * LAMPORTS_PER_SOL);
+    }
   });
 
   it("Checks the multisig state account state", async () => {
@@ -125,7 +145,7 @@ describe("anchor-multisig3", () => {
 
   it("Checks 1,000,000 SOL funding", async () => {
     const before = await provider.connection.getBalance(fund);
-    const lamports = 1000000 * web3.LAMPORTS_PER_SOL;
+    const lamports = 1000000 * LAMPORTS_PER_SOL;
     await program.methods
       .fund(new anchor.BN(lamports), stateBump, fundBump)
       .accounts({
@@ -145,7 +165,7 @@ describe("anchor-multisig3", () => {
   });
 
   it("Checks multiple queued transactions", async () => {
-    let balance = 1000000 * web3.LAMPORTS_PER_SOL;
+    let balance = 1000000 * LAMPORTS_PER_SOL;
     await program.methods
       .fund(new anchor.BN(balance), stateBump, fundBump)
       .accounts({
@@ -157,8 +177,8 @@ describe("anchor-multisig3", () => {
       .rpc();
 
     for (const [index, payee] of payees.entries()) {
-      const transfer = web3.Keypair.generate();
-      const lamports = 100 * index * web3.LAMPORTS_PER_SOL;
+      const transfer = Keypair.generate();
+      const lamports = 100 * index * LAMPORTS_PER_SOL;
       const lamportsBN = new anchor.BN(lamports);
       const signer = signers[index % signers.length];
       const tx = await program.methods
@@ -175,13 +195,21 @@ describe("anchor-multisig3", () => {
       balance -= lamports;
     }
 
+    // Checks the queue state as well as the balance of the
+    // multisig fund.
     const ms = await program.account.state.fetch(state);
     expect(ms.queue).to.have.lengthOf(payees.length);
     expect(ms.balance.eq(new anchor.BN(balance))).to.be.true;
+
+    // No transfer had been executed yet.
+    for (const payee of payees) {
+      const balance = await provider.connection.getBalance(payee.publicKey);
+      expect(balance).to.equal(0);
+    }
   });
 
   it("Checks the approval and the transfer execution", async () => {
-    let balance = 1000000 * web3.LAMPORTS_PER_SOL;
+    let balance = 1000000 * LAMPORTS_PER_SOL;
     await program.methods
       .fund(new anchor.BN(balance), stateBump, fundBump)
       .accounts({
@@ -193,8 +221,8 @@ describe("anchor-multisig3", () => {
       .rpc();
 
     for (const [index, payee] of payees.entries()) {
-      const transfer = web3.Keypair.generate();
-      const lamports = 1000 * index * web3.LAMPORTS_PER_SOL;
+      const transfer = Keypair.generate();
+      const lamports = 1000 * index * LAMPORTS_PER_SOL;
       const lamportsBN = new anchor.BN(lamports);
       const signer = signers[index % signers.length];
       const tx = await program.methods
@@ -250,10 +278,16 @@ describe("anchor-multisig3", () => {
         .rpc();
     }
 
-    // The queue is empty as well as the approval
-    // state was reset altogether.
+    // Checks The queue is empty and the signer state reset.
     ms = await program.account.state.fetch(state);
     expect(ms.signed.filter(Boolean)).to.have.lengthOf(0);
     expect(ms.queue).to.have.lengthOf(0);
+
+    // And transfer to the payees.
+    for (const [index, payee] of payees.entries()) {
+      const expected = 1000 * index * LAMPORTS_PER_SOL;
+      const balance = await provider.connection.getBalance(payee.publicKey);
+      expect(balance).to.equal(expected);
+    }
   });
 });
