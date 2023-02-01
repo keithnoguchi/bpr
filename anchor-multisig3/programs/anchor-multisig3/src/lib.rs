@@ -67,7 +67,7 @@ pub struct Multisig {
     fund_bump: u8,
 
     /// Remaining fund in lamports.
-    remaining_fund: u64,
+    balance: u64,
 
     /// A fund account, holding the native SOL.
     multisig_fund: Pubkey,
@@ -133,7 +133,7 @@ impl Multisig {
     }
 
     /// Validates the multisig fund account.
-    fn validate_fund_account<'info>(
+    fn validate_fund<'info>(
         multisig: &Account<'info, Self>,
         fund: &UncheckedAccount<'info>,
         bump: u8,
@@ -226,7 +226,7 @@ impl Transfer {
 }
 
 #[derive(Accounts)]
-#[instruction(m: u8, signers: Vec<Pubkey>, q: u8, bump: u8, bump_fund: u8)]
+#[instruction(m: u8, signers: Vec<Pubkey>, q: u8, bump: u8, fund_bump: u8)]
 pub struct Create<'info> {
     /// A funder of the multisig account.
     #[account(mut)]
@@ -245,7 +245,7 @@ pub struct Create<'info> {
     /// A multisig fund account.
     ///
     /// CHECK: Checked by the handler.
-    #[account(mut)]
+    #[account(mut, seeds = [b"fund", multisig.key().as_ref()], bump = fund_bump)]
     pub multisig_fund: UncheckedAccount<'info>,
 
     /// The system program to create a multisig PDA accounts.
@@ -253,7 +253,7 @@ pub struct Create<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(bump: u8)]
+#[instruction(lamports: u64, bump: u8, fund_bump: u8)]
 pub struct Fund<'info> {
     /// A funder of the account.
     ///
@@ -268,7 +268,7 @@ pub struct Fund<'info> {
     /// A multisig fund account.
     ///
     /// CHECK: Checked by the handler.
-    #[account(mut)]
+    #[account(mut, seeds = [b"fund", multisig.key().as_ref()], bump = fund_bump)]
     pub multisig_fund: UncheckedAccount<'info>,
 
     /// The system program to make the transfer of the funds.
@@ -277,6 +277,7 @@ pub struct Fund<'info> {
 
 /// Create and queue the new transfer under the multisig account.
 #[derive(Accounts)]
+#[instruction(recipient: Pubkey, lamports: u64, fund_bump: u8)]
 pub struct CreateTransfer<'info> {
     /// An initiator of the fund transfer.
     ///
@@ -284,14 +285,14 @@ pub struct CreateTransfer<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
 
-    /// A multisig state account.
+    /// A multisig state PDA account.
     #[account(mut)]
     pub multisig: Box<Account<'info, Multisig>>,
 
-    /// A multisig fund account.
+    /// A multisig fund PDA account.
     ///
     /// CHECK: Checked by the handler.
-    #[account(mut)]
+    #[account(mut, seeds = [b"fund", multisig.key().as_ref()], bump = fund_bump)]
     pub multisig_fund: UncheckedAccount<'info>,
 
     /// A transfer account to keep the queued transfer info.
@@ -313,6 +314,7 @@ pub struct CreateTransfer<'info> {
 /// In case of the 1 above, the account will be unlocked
 /// and starts to take a new transfer again.
 #[derive(Accounts)]
+#[instruction(fund_bump: u8)]
 pub struct Approve<'info> {
     /// An approver of the current state of the multisg account.
     #[account(mut)]
@@ -325,7 +327,7 @@ pub struct Approve<'info> {
     /// A multisig fund account.
     ///
     /// CHECK: Checked by the handler.
-    #[account(mut)]
+    #[account(mut, seeds = [b"fund", multisig.key().as_ref()], bump = fund_bump)]
     pub multisig_fund: UncheckedAccount<'info>,
 
     /// The system program to create a transfer account.
@@ -333,7 +335,7 @@ pub struct Approve<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(bump: u8)]
+#[instruction(bump: u8, fund_bump: u8)]
 pub struct Close<'info> {
     /// An original funder of the multisig account.
     #[account(mut)]
@@ -346,7 +348,7 @@ pub struct Close<'info> {
     /// A multisig fund account.
     ///
     /// CHECK: Checked by the handler.
-    #[account(mut)]
+    #[account(mut, seeds = [b"fund", multisig.key().as_ref()], bump = fund_bump)]
     pub multisig_fund: UncheckedAccount<'info>,
 
     /// The system program to transfer back the fund.
@@ -374,7 +376,7 @@ pub mod anchor_multisig3 {
         let multisig_fund = &mut ctx.accounts.multisig_fund;
 
         // Validate the multisig fund account.
-        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+        Multisig::validate_fund(&multisig, &multisig_fund, fund_bump)?;
 
         // Checks the uniqueness of signer's address.
         let signers: HashSet<_> = signers.into_iter().collect();
@@ -401,7 +403,7 @@ pub mod anchor_multisig3 {
         multisig.bump = bump;
         multisig.fund_bump = fund_bump;
         multisig.multisig_fund = multisig_fund.key();
-        multisig.remaining_fund = 0;
+        multisig.balance = 0;
         multisig.signed = vec![false; signers.len()];
         multisig.signers = signers.into_iter().collect();
 
@@ -417,15 +419,15 @@ pub mod anchor_multisig3 {
         let multisig_fund = &mut ctx.accounts.multisig_fund;
 
         // Validate the multisig fund account.
-        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+        Multisig::validate_fund(&multisig, &multisig_fund, fund_bump)?;
 
         // CPI to transfer fund to the multisig fund account.
         let ix = system_instruction::transfer(&funder.key(), &multisig_fund.key(), lamports);
         let accounts = [funder.to_account_info(), multisig_fund.to_account_info()];
         invoke(&ix, &accounts)?;
 
-        // Update the remaining fund.
-        multisig.remaining_fund += lamports;
+        // Update the balance.
+        multisig.balance += lamports;
 
         Ok(())
     }
@@ -445,7 +447,7 @@ pub mod anchor_multisig3 {
         require!(!Multisig::is_locked(&multisig), Error::LockedAccount);
 
         // Validate the multisig fund account.
-        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+        Multisig::validate_fund(&multisig, &multisig_fund, fund_bump)?;
 
         // Checks the creator.
         let creator_key = creator.key();
@@ -456,7 +458,7 @@ pub mod anchor_multisig3 {
         Multisig::validate_queue(&multisig)?;
 
         // Checks the multisig fund balance.
-        require_gte!(multisig.remaining_fund, lamports, Error::NotEnoughFund);
+        require_gte!(multisig.balance, lamports, Error::NotEnoughFund);
 
         // Giving back the rent fee to the creator.
         let from = multisig_fund.to_account_info();
@@ -470,8 +472,8 @@ pub mod anchor_multisig3 {
         transfer.creator = creator_key;
         transfer.recipient = recipient;
         transfer.lamports = lamports;
+        multisig.balance -= lamports;
         multisig.queue.push(transfer.key());
-        multisig.remaining_fund -= lamports;
 
         Ok(())
     }
@@ -487,7 +489,7 @@ pub mod anchor_multisig3 {
             .collect();
 
         // Validate the multisig fund account.
-        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+        Multisig::validate_fund(&multisig, &multisig_fund, fund_bump)?;
 
         // Nothing to approve.
         require!(!Multisig::is_empty(&multisig), Error::EmptyAccount);
@@ -559,7 +561,7 @@ pub mod anchor_multisig3 {
         let multisig_fund = &mut ctx.accounts.multisig_fund;
 
         // Validate the multisig fund account.
-        Multisig::validate_fund_account(&multisig, &multisig_fund, fund_bump)?;
+        Multisig::validate_fund(&multisig, &multisig_fund, fund_bump)?;
 
         // Close the multisig fund account by transfering all the lamports
         // back to the funder.

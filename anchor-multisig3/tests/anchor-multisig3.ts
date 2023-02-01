@@ -54,7 +54,7 @@ describe("anchor-multisig3", () => {
         signers.map((pair) => pair.publicKey),
         queueDepth,
         bump,
-        fundBump,
+        fundBump
       )
       .accounts({
         funder: wallet.publicKey,
@@ -131,7 +131,7 @@ describe("anchor-multisig3", () => {
       .rpc();
 
     const ms = await program.account.multisig.fetch(multisig);
-    expect(ms.remainingFund.eq(new anchor.BN(lamports))).to.be.true;
+    expect(ms.balance.eq(new anchor.BN(lamports))).to.be.true;
 
     // check the multisig fund native lamports as well.
     const balance = await provider.connection.getBalance(multisigFund);
@@ -139,9 +139,9 @@ describe("anchor-multisig3", () => {
   });
 
   it("Checks multiple queued transactions", async () => {
-    let remainingFund = 1000000 * web3.LAMPORTS_PER_SOL;
+    let balance = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .fund(new anchor.BN(remainingFund), bump, fundBump)
+      .fund(new anchor.BN(balance), bump, fundBump)
       .accounts({
         funder: wallet.publicKey,
         multisig,
@@ -166,18 +166,18 @@ describe("anchor-multisig3", () => {
         .signers([signer, transfer])
         .rpc();
 
-      remainingFund -= lamports;
+      balance -= lamports;
     }
 
     const ms = await program.account.multisig.fetch(multisig);
     expect(ms.queue).to.have.lengthOf(payees.length);
-    expect(ms.remainingFund.eq(new anchor.BN(remainingFund))).to.be.true;
+    expect(ms.balance.eq(new anchor.BN(balance))).to.be.true;
   });
 
   it("Checks the approval and the transfer execution", async () => {
-    let remainingFund = 1000000 * web3.LAMPORTS_PER_SOL;
+    let balance = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .fund(new anchor.BN(remainingFund), bump, fundBump)
+      .fund(new anchor.BN(balance), bump, fundBump)
       .accounts({
         funder: wallet.publicKey,
         multisig,
