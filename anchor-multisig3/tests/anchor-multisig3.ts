@@ -229,7 +229,7 @@ describe("anchor-multisig3", () => {
       );
 
     // 3/3 approval.
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < threshold; i++) {
       await program.methods
         .approve(fundBump)
         .accounts({
@@ -242,8 +242,10 @@ describe("anchor-multisig3", () => {
         .rpc();
     }
 
+    // The queue is empty as well as the approval
+    // state was reset altogether.
     ms = await program.account.state.fetch(state);
-    expect(ms.signed.filter(Boolean)).to.have.lengthOf(3);
+    expect(ms.signed.filter(Boolean)).to.have.lengthOf(0);
     expect(ms.queue).to.have.lengthOf(0);
   });
 });

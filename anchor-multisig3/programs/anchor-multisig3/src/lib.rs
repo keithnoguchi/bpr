@@ -540,6 +540,11 @@ pub mod anchor_multisig3 {
         // Update the remaining transfers.
         state.queue = remaining;
 
+        // Reset the signed status once the queue is empty.
+        if State::is_empty(&state) {
+            state.signed.iter_mut().for_each(|signed| *signed = false);
+        }
+
         Ok(())
     }
 
