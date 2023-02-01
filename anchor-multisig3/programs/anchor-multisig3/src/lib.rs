@@ -11,14 +11,14 @@ declare_id!("3LuouAGwBeueVADEviTaKLsgwkrinvfXKCNKPWcmbAQX");
 
 #[error_code]
 pub enum Error {
-    #[msg("Multisig queue is full")]
-    QueueFull,
+    #[msg("Multisig account is empty. Please create transactions")]
+    AccountEmpty,
 
-    #[msg("Multisig account is locked, either approve or close the account")]
-    LockedAccount,
+    #[msg("Multisig transaction queue is full. Please approve those.")]
+    AccountFull,
 
-    #[msg("Multisig account is empty, please propose the transfer transaction")]
-    EmptyAccount,
+    #[msg("Multisig account is locked. Please approve the transactions")]
+    AccountLocked,
 
     #[msg("Missing transfer recipient AccountInfo")]
     MissingRecipientAccountInfo,
@@ -60,7 +60,7 @@ pub struct State {
     /// An array of signers Pubkey.
     pub signers: Vec<Pubkey>,
 
-    /// An signed statue of the signers above.
+    /// A current signed state.
     pub signed: Vec<bool>,
 
     /// A fund PDA account, holding the native SOL.
@@ -106,23 +106,27 @@ impl State {
     }
 
     /// Checks if the transfer queue is empty.
-    fn is_empty<'info>(state: &Account<'info, Self>) -> bool {
-        state.queue.is_empty()
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
     }
 
     /// Check if the multisig queue is full.
-    fn is_full<'info>(state: &Account<'info, Self>) -> bool {
-        state.queue.len() == state.q as usize
+    pub fn is_full(&self) -> bool {
+        self.queue.len() == self.q as usize
     }
 
     /// Checks if the account had been locked.
-    fn is_locked<'info>(state: &Account<'info, Self>) -> bool {
-        state.signed.iter().any(|signed| *signed)
+    ///
+    /// The multisig account is locked once it's signed
+    /// by anyone.  It will be unlocked once the current
+    /// pending transactions were completed.
+    pub fn is_locked(&self) -> bool {
+        self.signed.iter().any(|signed| *signed)
     }
 
     /// Validates the multisig queue.
-    fn validate_queue<'info>(state: &Account<'info, Self>) -> Result<()> {
-        require!(!Self::is_full(state), Error::QueueFull);
+    pub fn validate_queue(&self) -> Result<()> {
+        require!(!self.is_full(), Error::AccountFull);
         Ok(())
     }
 
@@ -432,7 +436,7 @@ pub mod anchor_multisig3 {
         let transfer = &mut ctx.accounts.transfer;
 
         // Checks if the account is locked.
-        require!(!State::is_locked(&state), Error::LockedAccount);
+        require!(!state.is_locked(), Error::AccountLocked);
 
         // Validate the multisig fund account.
         State::validate_fund(&state, &fund, fund_bump)?;
@@ -443,7 +447,7 @@ pub mod anchor_multisig3 {
         require!(signers.contains(&creator_key), Error::InvalidSigner);
 
         // Check the current transfer queue.
-        State::validate_queue(&state)?;
+        state.validate_queue()?;
 
         // Checks the multisig fund balance.
         require_gte!(state.balance, lamports, Error::NotEnoughFund);
@@ -480,7 +484,7 @@ pub mod anchor_multisig3 {
         State::validate_fund(&state, &fund, fund_bump)?;
 
         // Nothing to approve.
-        require!(!State::is_empty(&state), Error::EmptyAccount);
+        require!(!state.is_empty(), Error::AccountEmpty);
 
         // Checks the signer.
         let signer_key = signer.key();
