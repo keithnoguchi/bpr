@@ -11,12 +11,12 @@ describe("anchor-multisig3", () => {
   // Prepares for the multisig PDAs.
   const program = anchor.workspace.AnchorMultisig3 as Program<AnchorMultisig3>;
   const wallet = provider.wallet;
-  const [multisig, bump] = web3.PublicKey.findProgramAddressSync(
-    [anchor.utils.bytes.utf8.encode("multisig"), wallet.publicKey.toBuffer()],
+  const [state, stateBump] = web3.PublicKey.findProgramAddressSync(
+    [anchor.utils.bytes.utf8.encode("state"), wallet.publicKey.toBuffer()],
     program.programId
   );
-  const [multisigFund, fundBump] = web3.PublicKey.findProgramAddressSync(
-    [anchor.utils.bytes.utf8.encode("fund"), multisig.toBuffer()],
+  const [fund, fundBump] = web3.PublicKey.findProgramAddressSync(
+    [anchor.utils.bytes.utf8.encode("fund"), state.toBuffer()],
     program.programId
   );
 
@@ -53,13 +53,13 @@ describe("anchor-multisig3", () => {
         threshold,
         signers.map((pair) => pair.publicKey),
         queueDepth,
-        bump,
+        stateBump,
         fundBump
       )
       .accounts({
         funder: wallet.publicKey,
-        multisig,
-        multisigFund,
+        state,
+        fund,
       })
       .signers([wallet.payer])
       .rpc();
@@ -68,11 +68,11 @@ describe("anchor-multisig3", () => {
   afterEach(async () => {
     try {
       await program.methods
-        .close(bump, fundBump)
+        .close(stateBump, fundBump)
         .accounts({
           funder: wallet.publicKey,
-          multisig,
-          multisigFund,
+          state,
+          fund,
         })
         .signers([wallet.payer])
         .rpc();
@@ -81,13 +81,11 @@ describe("anchor-multisig3", () => {
     }
   });
 
-  it("Checks the multisig account state", async () => {
-    const ms = await program.account.multisig.fetch(multisig);
+  it("Checks the multisig state account state", async () => {
+    const ms = await program.account.state.fetch(state);
     expect(ms.m).to.equal(threshold);
     expect(ms.q).to.equal(queueDepth);
-    expect(ms.bump).to.equal(bump);
-    expect(ms.fundBump).to.equal(fundBump);
-    expect(ms.multisigFund).to.deep.equal(multisigFund);
+    expect(ms.fund).to.deep.equal(fund);
     expect(ms.signers).to.have.lengthOf(signers.length);
     expect(ms.signers).to.include.deep.members(
       signers.map((pair) => pair.publicKey)
@@ -100,17 +98,17 @@ describe("anchor-multisig3", () => {
 
   it("Checks the account closure", async () => {
     await program.methods
-      .close(bump, fundBump)
+      .close(stateBump, fundBump)
       .accounts({
         funder: wallet.publicKey,
-        multisig,
-        multisigFund,
+        state,
+        fund,
       })
       .signers([wallet.payer])
       .rpc();
 
     try {
-      await program.account.multisig.fetch(multisig);
+      await program.account.state.fetch(state);
       expect.fail("it should throw");
     } catch (e) {
       expect(e.message).to.contain("Account does not exist");
@@ -118,34 +116,34 @@ describe("anchor-multisig3", () => {
   });
 
   it("Checks 1,000,000 SOL funding", async () => {
-    const before = await provider.connection.getBalance(multisigFund);
+    const before = await provider.connection.getBalance(fund);
     const lamports = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .fund(new anchor.BN(lamports), bump, fundBump)
+      .fund(new anchor.BN(lamports), stateBump, fundBump)
       .accounts({
         funder: wallet.publicKey,
-        multisig,
-        multisigFund,
+        state,
+        fund,
       })
       .signers([wallet.payer])
       .rpc();
 
-    const ms = await program.account.multisig.fetch(multisig);
+    const ms = await program.account.state.fetch(state);
     expect(ms.balance.eq(new anchor.BN(lamports))).to.be.true;
 
     // check the multisig fund native lamports as well.
-    const balance = await provider.connection.getBalance(multisigFund);
+    const balance = await provider.connection.getBalance(fund);
     expect(balance - before).to.equal(lamports);
   });
 
   it("Checks multiple queued transactions", async () => {
     let balance = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .fund(new anchor.BN(balance), bump, fundBump)
+      .fund(new anchor.BN(balance), stateBump, fundBump)
       .accounts({
         funder: wallet.publicKey,
-        multisig,
-        multisigFund,
+        state,
+        fund,
       })
       .signers([wallet.payer])
       .rpc();
@@ -159,8 +157,8 @@ describe("anchor-multisig3", () => {
         .createTransfer(payee.publicKey, lamportsBN, fundBump)
         .accounts({
           creator: signer.publicKey,
-          multisig,
-          multisigFund,
+          state,
+          fund,
           transfer: transfer.publicKey,
         })
         .signers([signer, transfer])
@@ -169,7 +167,7 @@ describe("anchor-multisig3", () => {
       balance -= lamports;
     }
 
-    const ms = await program.account.multisig.fetch(multisig);
+    const ms = await program.account.state.fetch(state);
     expect(ms.queue).to.have.lengthOf(payees.length);
     expect(ms.balance.eq(new anchor.BN(balance))).to.be.true;
   });
@@ -177,11 +175,11 @@ describe("anchor-multisig3", () => {
   it("Checks the approval and the transfer execution", async () => {
     let balance = 1000000 * web3.LAMPORTS_PER_SOL;
     await program.methods
-      .fund(new anchor.BN(balance), bump, fundBump)
+      .fund(new anchor.BN(balance), stateBump, fundBump)
       .accounts({
         funder: wallet.publicKey,
-        multisig,
-        multisigFund,
+        state,
+        fund,
       })
       .signers([wallet.payer])
       .rpc();
@@ -195,15 +193,15 @@ describe("anchor-multisig3", () => {
         .createTransfer(payee.publicKey, lamportsBN, fundBump)
         .accounts({
           creator: signer.publicKey,
-          multisig,
-          multisigFund,
+          state,
+          fund,
           transfer: transfer.publicKey,
         })
         .signers([signer, transfer])
         .rpc();
     }
 
-    let ms = await program.account.multisig.fetch(multisig);
+    let ms = await program.account.state.fetch(state);
     expect(ms.queue).to.have.lengthOf(payees.length);
     expect(ms.signed.filter((signed) => signed)).to.have.lengthOf(0);
 
@@ -236,15 +234,15 @@ describe("anchor-multisig3", () => {
         .approve(fundBump)
         .accounts({
           signer: signers[i].publicKey,
-          multisig,
-          multisigFund,
+          state,
+          fund,
         })
         .remainingAccounts(remainingAccounts)
         .signers([signers[i]])
         .rpc();
     }
 
-    ms = await program.account.multisig.fetch(multisig);
+    ms = await program.account.state.fetch(state);
     expect(ms.signed.filter(Boolean)).to.have.lengthOf(3);
     expect(ms.queue).to.have.lengthOf(0);
   });
